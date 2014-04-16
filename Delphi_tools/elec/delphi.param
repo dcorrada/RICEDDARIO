@@ -1,0 +1,32 @@
+! DelPhi paramater file
+!
+! INPUT FILES
+in(pdb,file="3F1Pa.pdb") ! struttura pdb
+in(siz,file="default.siz") ! atom radii basati su Connolly
+in(crg,file="default.crg") ! cariche atomiche
+!
+! VARIABILI
+scale=2.0 ! passo della griglia (unita'_di_griglia/Angstrom)
+perfil=40 ! perfil scales molecule to grid
+gsize=251 ! increased gsize increases resolution of grid
+indi=4.0 ! dielectric interno
+! INDI=4-6 represents a process where some small reorganization of molecular
+! dipoles occurs which is not represented explicitly
+exdi=80.0 ! dielectric esterno
+prbrad=1.4 ! raggio della rpobe del solvente
+!
+! CALCOLO DELL'ENERGIA
+energy(s,c,g)
+! The grid energy (g) is obtained from the product of the potential at each point
+! on the grid and the charge at that point, summed over all points on the grid.
+! The coulombic energy (c) is defined as the energy required to bring charges
+! from infinite distance to their resting positions within the dielectric
+! specified for the molecule.
+! The reaction field energy (s, the solvation energy) is obtained from the
+! product of the potential due to induced surface charges with all fixed charges
+! of the solute molecule.
+
+!
+!
+! OUTPUT FILES
+out(phi,unit=20,format=2) ! phi map

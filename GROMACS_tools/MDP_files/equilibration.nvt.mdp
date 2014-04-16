@@ -1,0 +1,74 @@
+;LINES STARTING WITH ';' ARE COMMENTS
+title        = solvent equilibration in NVT ensemble
+
+; preprocessor (obsoleto, usare in GMX3.X)
+; cpp             = /lib/cpp
+
+; include         = -I../top      ; Directories to include in the topology format
+
+; position restrain the protein and flexible water
+; in GMX3.x usare define = -DPOSRE -DFLEX_SPC
+define           = -DPOSRES
+
+; Run parameters
+integrator      = md            ; Algorithm, leap-frog integrator
+nsteps          = 50000         ; Maximum number of (minimization) steps to perform = 100 ps
+dt              = 0.002         ; Time step in picosecond
+
+; Output control
+nstenergy       = 250           ; Write energies to disk every nstenergy steps
+nstxout         = 250           ; Write coordinates to disk every nstxout steps
+nstvout         = 250           ; Write velocities to disk every nstvout steps
+nstfout         = 0             ; Write forces to disk every nstfout steps
+nstlog          = 250           ; Write energies to logfile every nstlog steps 
+nstxtcout       = 250           ; Write compressed coordinates (xtc file) to disk every nstxtcout steps
+xtc_grps        = System        ; Group(s) to write to xtc trajectory
+energygrps      = System        ; Group(s) to write to energy file
+
+; Bond parameters
+continuation         = no           ; first dynamics run
+constraint_algorithm = lincs        ; holonomic constraints 
+constraints          = all-bonds    ; all bonds (even heavy atom-H bonds) constrained
+lincs_iter           = 1            ; accuracy of LINCS
+lincs_order          = 4            ; also related to accuracy
+
+; Neighborsearching
+ns_type         = grid          ; Method to determine neighbor list (simple, grid)
+nstlist         = 5             ; Frequency to update the neighbor list and long range forces (10 fs))
+rlist           = 0.9           ; Cut-off for making neighbor list (short range forces)
+rcoulomb        = 0.9           ; long range electrostatic cut-off (in nm)
+rvdw            = 0.9           ; long range Van der Waals cut-off (in nm)
+
+; Electrostatics
+coulombtype              = PME      ; Particle Mesh Ewald for long-range electrostatics
+pme_order                = 4        ; cubic interpolation
+fourierspacing           = 0.16     ; grid spacing for FFT
+ewald_rtol               = 1e-05
+epsilon_surface          = 0
+optimize_fft             = yes
+fourier_nx               = 0
+fourier_ny               = 0
+fourier_nz               = 0
+cutoff-scheme            = Verlet   ; needed to use GPU
+
+; Temperature coupling is on
+tcoupl       = V-rescale      ; modified Berendsen thermostat
+tc-grps      = Protein SOL   UNK     Ion ; coupling groups
+tau_t        = 0.1    0.1    0.1     0.1 ; time constant, in ps
+ref_t        = 300    300    300     300 ; reference temperature, one for each group, in K
+
+; Pressure coupling is off
+pcoupl        = no         ; no pressure coupling in NVT
+
+; Periodic boundary conditions
+pbc        = xyz        ; Periodic Boundary Conditions
+
+; Dispersion correction
+DispCorr    = EnerPres    ; account for cut-off vdW scheme
+
+; Velocity generation
+gen_vel     = yes        ; assign velocities from Maxwell distribution
+gen_temp    = 300        ; temperature for Maxwell distribution
+gen_seed    = -1         ; generate a random seed
+
+

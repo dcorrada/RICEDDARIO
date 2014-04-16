@@ -1,0 +1,44 @@
+*** release 14.4.lbpc7 ***
+
+- Binaries conf file
+    At first time EMMA will create the file "/home/user/.EMMA.conf", in which 
+    are stored the paths of third party softwares
+
+- Bugfix
+    Lines count of rmsd.xpm file
+
+- Output flow
+    Some output file has been renamed and/or hidden from the standard output.
+    Comments lines in "EMMA.reloaded.pl" at "CLEANSWEEP" section to restore them.
+
+- Distance Fluctuation
+    DF matrix will be plotted just at one level of contrast.
+
+- Communication Propensity
+    Plot the CP matrix, numerical values of such matrix are presented in csv 
+    format (triangular matrix, non redundant)
+
+- Cytoscape module (dev)
+    Parsing CP matrix with Cytoscape...
+
+
+*** release 14.3.lbpc7 ***
+
+- System calls
+    All shell commands are invoked by "qx/[string]/" Perl syntax instead of 
+    "system([srtring])" Perl command.
+
+- Rank aggregation methods
+    The Rank Aggregation method has been implemented with a brute force algorithm.
+    The evaluation criteria of cluster analysis have been changed according to
+    those "internals" provided with the R clValid package
+
+
+*** release 13.4.mazinga ***
+
+- Tested for GROMACS v4.5.4
+
+
+*** release 12.11.voltron ***
+
+- First official release

@@ -1,0 +1,52 @@
+Get a PDB file, named something like "myprot.pdb" and put your PDB file in a 
+fresh new newly "elec" directory.
+
+In this directory edit the file "delphi.param" and change the PDB file name to 
+the name you chose. Run DelPhi in that directory:
+
+    $ delphi delphi.param
+
+Change the name of the "fort.20" file to something that ends with ".phi", for 
+example "mymap.phi":
+
+    $ mv fort.20 mymap.phi
+
+Start a PyMol session in this directory:
+
+    $ pymol myprot.pdb
+
+You need the map, e.g. "mymap.phi", and the PDB file, e.g. "myprot.pdb". Show 
+the surface of your molecule in the PyMol menu:
+
+    => myprot => show => surface
+
+Load the electrostatic grid in PyMol:
+
+    PyMOL> load mymap.phi, e_map
+
+This grid is now an object in your PyMol menu called "e_map". Create a color 
+ramp in PyMol:
+
+    PyMOL> ramp_new e_lvl, e_map, [-7, 0, 7]
+
+This color ramp is now an object in your PyMol menu called "e_lvl". Color the 
+surface according to the grid and map:
+
+    PyMOL> set surface_color, e_lvl, myprot
+
+The term "myprot" in this command should be the name of your molecule. You can 
+change the color scale on the fly in PyMol by issuing another "ramp_new" command 
+with other numbers (this makes it have more red and blue):
+
+    PyMOL> ramp_new e_lvl, e_map, [-3, 0, 3]
+
+The 3 numbers are red-point, white-point and blue-point, respectively. The scale 
+can also be changed by [ctrl+mid-click] while you drag the color scale. You can 
+also change the quality of the surface in the PyMol in the control window with 
+the PyMol menu:
+
+    => Setting => Edit All... => surface_quality => 2
+
+You will need to wait a few minutes (give it 5 at least) for PyMol to calculate 
+the surface with this setting. It only needs to calculate the surface once, and 
+it will rotate and move fairly easily after that, but will look DAMN GOOD too.

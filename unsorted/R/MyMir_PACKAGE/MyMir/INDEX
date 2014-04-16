@@ -1,0 +1,32 @@
+BioMart.list-class                           Class "BioMart.list"
+Clusterama                                   Cluster Analysis from Overrepresented GO Terms
+Clusterama-class                             Class "Clusterama"
+Cluster.Dataframes                           Summary Dataframes From a Cluster Analysis
+CornaOut.df-class                            Class "CornaOut.df"
+CrossLinks-class                             Class "CrossLinks"
+Dist.Heatmap                                 Distance Matrix Heatmap
+Fetch.CrossLinks                             Retrieving a framework of crosslinks between RefSeq, Ensembl, GO and KEGG IDs
+Fetch.UniPop                                 Input Raw Data for Universe and Population Dataset
+Gene2Path.df-class                           Class "Gene2Path.df"
+GO2Term.df-class                             Class "GO2Term.df"
+Hopach.Run                                   Estimating the Optimal Number of Clusters
+MDS                                          Classical Multidimensional Scaling
+MyMir.CrossLinks                             Crosslinks framework for Mus Musculus
+MyMir.OverReps                               Overall Test Output
+MyMir-package                                A functional analysis of a pool microRNA target genes
+MyMir.UniPop                                 Dataset of Universe and Population
+OverallTest                                  Statistical association test over GO and KEGG
+OverReps-class                               Class "OverReps"
+Partitional Clustering                       Partitional Clustering
+Population.df-class                          Classes "Population.df" and "Universe.df"
+QueryBuild.Population                        Query List Object Builder
+QuerySelect-class                            Class "QuerySelect"
+RefSeq2Ensembl.list-class                    Class "RefSeq2Ensembl.list"
+SemanticSimilarity                           Building Semantic Similarity Matrix
+SQL.list-class                               Class "SQL.list"
+Term2Target                                  Finding predicted target genes grouped by GO or KEGG terms
+Trans2GO.list-class                          Class "Trans2GO.list"
+UniPop-class                                 Class "UniPop"
+universe.mm9                                 Mus Musculus whole genome dataset
+UpdateDB.Clusterama                          Upload cluster analysis results on database
+UpdateDB.OverReps                            Upload association test results on database

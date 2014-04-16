@@ -1,0 +1,33 @@
+title           =  minimization
+
+include         = -I../top
+
+; preprocessor (obsoleto, da usare in GMX3.x)
+; cpp             =  /lib/cpp
+
+; considero l'acqua flessibile (in GMX3.x  usare define = -DFLEX_SPC)
+define          =  -DFLEXIBLE 
+
+; Parameters describing what to do, when to stop and what to save
+integrator      =  steep        ; Algorithm (steep = steepest descent minimization)
+emtol           =  1000.0       ; Stop minimization when the maximum force < emtol kJ/mol/nm
+emstep          =  0.01         ; Energy step size
+nsteps          =  100000       ; Maximum number of (minimization) steps to perform
+tinit           =  0.0
+dt              =  0.002        ; timestep in ps
+nstcomm         = 1             ; frequency for center of mass motion removal (every nstcomm steps)
+
+; Parameters describing how to find the neighbors of each atom and how to calculate the interactions
+constraints     =  none
+nstlist         =  10           ; Frequency to update the neighbor list and long range forces
+ns_type         =  grid         ; Method to determine neighbor list (simple, grid)
+rlist           =  0.9          ; Cut-off for making neighbor list (short range forces)    
+rcoulomb        =  0.9          ; electrostatic cut-off
+rvdw            =  0.9          ; Van der Waals cut-off
+coulombtype     = PME
+fourierspacing  = 0.12
+pme_order       = 4
+ewald_rtol      = 1e-05
+cutoff-scheme   = Verlet        ; needed to use GPU
+
+

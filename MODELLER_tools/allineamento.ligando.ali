@@ -1,0 +1,15 @@
+# Alla fine delle sequenze ci metto un carattere '.' per indicare che nel 
+# modello voglio inserire anche un eteroatomo (ligando). Qui voglio inserire 
+# solo il ligando proveniente dalla struttura 3F1O e non da 3F1P (in cui 
+# inserisco un trattino '-', altrimenti nel modello finale otterre un oggetto 
+# geometrico di punti che definirebbero l'inviluppo di entrambi i ligandi)
+
+>P1;rawmodel
+sequence: : : : : : : : :
+FKGLDSKTFLSEHSMDMKFTYCDDRITELIGYHPEELLGRSAYEFYHALDSENMTKSHQNLCTKGQVVSGQYRMLAKHGGYVWLETQGTVIYNPRNLQPQCIMCVNYVLSEIEK.*
+>P1;3F1O
+structureX:3F1O.pdb:236:A:350:A: : : :
+FKGLDSKTFLSEHSMDMKFTYCDDRITELIGYHPEELLGRSAYEFYHALDSENMTKSHQNLCTKGQVVSGQYRMLAKHGGYVWLETQGTVIYN-----PQCIMCVNYVLSEIEK.*
+>P1;3F1P
+structureX:3F1P.pdb:236:A:349:A: : : :
+FKGLDSKTFLSEHSMDMKFTYCDDRITELIGYHPEELLGRSAYEFYHALDSENMTKSHQNLCTKGQVVSGQYRMLAKHGGYVWLETQGTVIYNPRNLQPQCIMCVNYVLSEIEK-*

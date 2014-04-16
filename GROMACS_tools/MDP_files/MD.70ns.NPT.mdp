@@ -1,0 +1,69 @@
+title                   = 80ns MD in NPT ensemble
+; VARIOUS PREPROCESSING OPTIONS
+cpp                     = /lib/cpp
+include                 = -I../top
+define                  =  
+; RUN PARAMETERS
+integrator              = md                    ; algorithm, leap-frog integrator
+tinit                   = 0                     ; start time
+dt                      = 0.002                 ; timestep in ps (= 2 fs)
+nsteps                  = 35000000
+nstcomm                 = 1
+
+; OUTPUT CONTROL
+nstxout                 = 10000                 ; save coordinates every 20 ps
+nstvout                 = 10000                 ; save velocities every 20 ps
+nstfout                 = 10000                 ; save forces every 20 ps
+nstlog                  = 500                   ; update log file every 1 ps
+nstenergy               = 2000                  ; save energies every 4 ps
+energygrps              = Protein SOL   UNK     Ion ; Selection of energy groups
+nstxtcout               = 500                   ; xtc trajectory output every 1 ps
+xtc-precision           = 1000                  ; precision to write to xtc trajectory
+xtc-grps                = Protein UNK           ; groups to consider in xtc tajectory
+; BOND PARAMETERS
+continuation            = yes                   ; Restarting after NPT equilibration step
+constraint-algorithm    = lincs                 ; holonomic constraints 
+constraints             = all-bonds             ; all bonds (even heavy atom-H bonds) constrained
+lincs-iter              = 1                     ; accuracy of LINCS
+lincs-order             = 4                     ; also related to accuracy
+lincs-warnangle         = 30                    ; Lincs will write a warning to the stderr if in one step a bond rotates over more that 30 degrees
+morse                   = no                    ; bonds are represented by a harmonic (= no) or Morse (= yes) potential
+; OPTIONS FOR ELECTROSTATICS AND VDW
+ns_type                 = grid                  ; search neighboring grid cells
+nstlist                 = 5                     ; nblist update frequency (10 fs)
+rlist                   = 0.9                   ; short-range neighborlist cutoff (in nm)
+rcoulomb                = 0.9                   ; short-range electrostatic cutoff (in nm)
+rcoulomb-switch         = 0
+rvdw                    = 0.9                   ; short-range van der Waals cutoff (in nm)
+rvdw-switch             = 0
+; METHOD FOR DOING ELECTROSTATICS
+vdw-type                = cut-off               ; Method for doing Van der Waals
+coulombtype             = PME                   ; Particle Mesh Ewald for long-range electrostatics
+pme_order               = 4                     ; cubic interpolation
+ewald-rtol              = 1e-05                 ; relative strength of the Ewald-shifted direct potential at rcoulomb
+fourierspacing          = 0.12                  ; grid spacing for FFT
+optimize_fft            = yes
+epsilon-r               = 1                     ; dielectric constant for cut-off 
+epsilon-rf              = 0                     ; dielectric constant of the reaction field
+cutoff-scheme           = Verlet                ; needed to use GPU
+; TEMPERATURE COUPLING
+tcoupl                  = Berendsen             ; Berendsen thermostat
+tc-grps      = Protein SOL   UNK     Ion ; coupling groups
+tau_t        = 0.1    0.1    0.1     0.1 ; time constant, in ps
+ref_t        = 300    300    300     300 ; reference temperature, one for each group, in K
+annealing    =  no     no     no      no ; simulated annealing
+; PRESSURE COUPLING
+pcoupl                  = Berendsen             ; Pressure coupling on in NPT
+pcoupltype              = isotropic             ; uniform scaling of box vectors
+tau-p                   = 1.0                   ; time constant, in ps
+ref-p                   = 1.0                   ; reference pressure, in bar
+compressibility         = 4.5e-5                ; isothermal compressibility of water, bar^-1
+; PERIODIC BOUNDARY CONDITIONS
+pbc                     = xyz
+; DISPERSION CORRECTION
+DispCorr                = no                    ; Apply long range dispersion corrections for Energy and/or Pressure
+; VELOCITY GENERATION
+gen-vel                 = no
+; LANGEVIN DYNAMICS
+bd-fric                 = 0                     ; Brownian dynamics friction coefficient. When = 0, the coefficient is calculated as mass/tau-t.
+ld-seed                 = 1993

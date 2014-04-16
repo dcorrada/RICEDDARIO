@@ -1,0 +1,16 @@
+Package: MyMir
+Type: Package
+Title: A functional analysis of a pool microRNA target genes
+Version: 2.10-05
+Date: 2010-05-02
+Author: Dario Corrada
+Maintainer: Dario Corrada <dario.corrada@itb.cnr.it>
+Depends: CORNA, GOSemSim, methods, RODBC, RMySQL, cluster, RColorBrewer, hopach
+Description: MyMir is a package with functions for collecting miRNA target 
+        from a defined database and find statistically over-represented 
+        target/functional annotation relationships. Over-represented ontologies 
+        can also be clustered together by applying the semantic similarity 
+        criterion. This package allows to perform a partitional clustering
+        procedure in order to highlight the most similar over-represented
+        ontologies.
+License: GPL-2

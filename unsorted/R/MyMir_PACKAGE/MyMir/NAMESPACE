@@ -1,0 +1,8 @@
+import("methods")
+## Classes
+exportClasses('BioMart.list', 'Clusterama', 'CornaOut.df', 'CrossLinks', 'Gene2Path.df', 'GO2Term.df', 'OverReps', 'Population.df', 'QuerySelect', 'RefSeq2Ensembl.list', 'SQL.list', 'Trans2GO.list', 'UniPop', 'Universe.df')
+## Methods
+exportMethods('CoalesceQuery', 'Ensembl', 'Fetch', 'UpdateDB')
+## Functions
+export('Clusterama', 'Cluster.Dataframes', 'Dist.Heatmap', 'Hopach.Run', 'MDS', 'OverallTest', 'Partitional.Clustering', 'QueryBuild.Population', 'QueryBuild.Universe', 'SemanticSimilarity', 'Term2Target')
+## NOT EXPORTED
