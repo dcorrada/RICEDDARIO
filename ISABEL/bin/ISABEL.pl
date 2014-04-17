@@ -13,6 +13,7 @@ use ISABEL::lib::FileIO; # my lib for I/O functions over files
 ## SBIL ##
 
 ## GLOBS ##
+my $bin_file = $ENV{HOME} . '/.ISABEL.conf';
 my $workdir = getcwd(); # the current work directory
 my $res_range = [ ]; # residue range onto performing calculations
 my $refpdb; # reference structure file
@@ -27,12 +28,12 @@ my %address = (
     'leaprc_rc'     =>  $ISA_path . '/data/leaprc.ff03.v9', # con AMBER11 usare invece il file leaprc.ff03.v11
     'minin_rc'      =>  $ISA_path . '/data/min.in',
     'mmpbsain_rc'   =>  $ISA_path . '/data/mm_pbsa.in',
-    'tleap_bin'     =>  '/usr/local/amber9/exe/tleap',
-    'sander_bin'    =>  '/usr/local/amber9/exe/sander',
-    'mmpbsa_bin'    =>  '/usr/local/amber9/exe/mm_pbsa.pl',
+    'tleap_bin'     =>  'tleap',
+    'sander_bin'    =>  'sander',
+    'mmpbsa_bin'    =>  'mm_pbsa.pl',
     'diagoxxl_bin'  =>  $ISA_path . '/bin/diagoxxl',
     'blocks_bin'    =>  $ISA_path . '/bin/blocks',
-    'gnuplot_bin'   =>  '/home/student/opt/gnuplot44',
+    'gnuplot_bin'   =>  'gnuplot',
 );
 my $ISA_log = '/ISABEL.log';
 ## SHTAP ##
@@ -47,7 +48,7 @@ USAGE: {
 
 ********************************************************************************
 ISABEL - ISabel is Another BEppe Layer
-release 14.4.mazinga
+release 14.4.satellite
 
 Copyright (c) 2011-2014, Dario Corrada <dario.corrada\@gmail.com>
 
@@ -84,6 +85,11 @@ OPTIONS
                     the first eigenvector
 
 RELEASE NOTES
+    *** release 14.4.satellite ***
+    
+    - Config file
+        At the first lauch you will be asked to confirm the path of third party
+        softwares
     
     *** release 14.4.mazinga ***
     
@@ -101,10 +107,55 @@ END
 }
 
 INIT: {
-
+    # verifico la presenza del file ~/.ISABEL.conf
+    unless (-e $bin_file) {
+        my $ans;
+        print "\nISABEL is not yet configured, do you want to proceed? [y/N] ";
+        $ans = <STDIN>; chomp $ans;
+        unless ($ans eq 'y') {
+            print "\nNothing to do";
+            goto FINE;
+        }
+        print "\n";
+        open(CONF, '>' . $bin_file) or croak("E- unable to open <$bin_file>\n\t");
+        print CONF "# Paths of binaries used by ISABEL\n";
+        foreach my $key (sort keys %address) {
+            my $path;
+            if ($address{$key} =~ m/$ISA_path/) {
+                $path = $address{$key}; # file interni di ISABEL, riconfigurabili comunque
+            } else {
+                $path = qx/which $address{$key}/; chomp $path; # ricerca automatica per gli altri
+            }
+            printf("    %-8s [%s]: ", $key, $path);
+            my $ans = <STDIN>; chomp $ans;
+            if ($ans) {
+                print CONF "$key = $ans\n";
+            } elsif (!$path){
+                print CONF "$key = null\n";
+            } else {
+                print CONF "$key = $path\n";
+            }
+        }
+        close CONF;
+    }
+    
+    open(CONF, '<' . $bin_file) or croak("E- unable to open <$bin_file>\n\t"); 
+    while (my $newline = <CONF>) {
+        if ($newline =~ /^#/) {
+            next; # skippo le righe di commento
+        } elsif ($newline =~ / = /) {
+            chomp $newline;
+            my ($key, $value) = $newline =~ m/([\w\d_\.]+) = ([\w\d_\.\/]+)/;
+            $address{$key} = $value if (exists $address{$key});
+        } else {
+            next;
+        }
+    }
+    close CONF;
+    
     # "mise en place" of the required files
     foreach my $check (keys %address) {
-        croak("\nE- file [$address{$check}] not found\n\t") unless (-e $address{$check});
+        croak("\nE- file [$address{$check}] not found, please check your file <$bin_file>\n\t") unless (-e $address{$check});
     };
     
     

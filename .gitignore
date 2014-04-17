@@ -1,0 +1,11 @@
+# generic temporary files
+*~
+
+# compiled python files
+*.pyc
+
+# hidden files
+.??*
+
+# kate temporary files
+*.kate-swp

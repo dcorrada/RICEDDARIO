@@ -31,6 +31,7 @@ closedir PATHS;
 my $path_string = "\n\n# RICEDDARIO package [https://github.com/dcorrada/RICEDDARIO]\nexport PATH=";
 while (my $single_path = shift @path_list) {
     next if ($single_path eq 'EMMA'); # questo lo faccio dopo
+    next if ($single_path eq 'ISABEL'); # questo lo faccio dopo
     next if ($single_path =~ m/^\./);
 #     print "\n[$single_path]";
     if (-d $single_path) {
@@ -41,12 +42,17 @@ $path_string .= "\$PATH\n";
 
 # adding RICEDDARIO's parent path
 my ($pruned) = $workdir =~ /(.+)\/RICEDDARIO$/;
-$path_string .= "export PERL5LIB=$pruned:\$PERL5LIB\n";
+$path_string .= "export PERL5LIB=$pruned:$workdir:\$PERL5LIB\n";
 
 # percorsi specifici per EMMA
 $path_string .= "\n# EMMA (from RICEDDARIO)\n";
 $path_string .= "export PATH=$workdir/EMMA/EMMA/bin:$workdir/EMMA/RAGE/bin:\$PATH\n";
 $path_string .= "export PERL5LIB=$workdir/EMMA:\$PERL5LIB\n";
+
+# percorsi specifici per ISABEL
+$path_string .= "\n# ISABEL (from RICEDDARIO)\n";
+$path_string .= "export PATH=$workdir/ISABEL/bin:\$PATH\n";
+$path_string .= "export PERL5LIB=$workdir/ISABEL:\$PERL5LIB\n";
 
 $path_string .= "\n";
 
