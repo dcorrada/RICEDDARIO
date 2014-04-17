@@ -1,4 +1,4 @@
-package my_PERL::misc::Parse_Array;
+package RICEDDARIO::lib::Parse_Array;
 
 # to make STDOUT flush immediately, simply set the variable
 # this can be useful if you are writing to STDOUT in a loop
@@ -238,19 +238,19 @@ sub repeats {
 
 1;
 
-=head1 my_PERL::Parse_Array
+=head1 RICEDDARIO::lib::Parse_Array
 
 Analizza il contenuto di array
 
 =head1 Synopsis
 
-    use my_PERL::Parse_Array;
+    use RICEDDARIO::lib::Parse_Array;
 
     # definisco gli array da confrontare
     my $array_1 = ['pippo', 'pluto', 'topolino', 'DISNEY'];
     my $array_2 = ['paperino', 'DISNEY', 'quiquoqua'];
 
-    my $object = my_PERL::Parse_Array->new();
+    my $object = RICEDDARIO::lib::Parse_Array->new();
 
     # inizializzo l'oggetto con i due array
     $object->set_array_A($array_1);

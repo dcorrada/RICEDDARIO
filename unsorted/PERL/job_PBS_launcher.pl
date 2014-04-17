@@ -54,8 +54,8 @@ my ($queue_list, $done_list) = ([ ], [ ]);
 # esco se una delle liste di file è vuota
 croak "\n---\nfile non trovati, impossibile lanciare i jobs\n" unless (@$queue_list);
 
-use my_PERL::PBS_manager::Scheduler;
-my $obj = 'my_PERL::PBS_manager::Scheduler';
+use RICEDDARIO::lib::PBS_manager::Scheduler;
+my $obj = 'RICEDDARIO::lib::PBS_manager::Scheduler';
 my $launch_obj = $obj->new();
 my $total_job = scalar @$queue_list;
 my $job_number = 0;
@@ -87,8 +87,8 @@ exit;
 #            );
 sub status_monitor {
     my (%arg) = @_;
-    use my_PERL::misc::Clock;
-    my $clock = 'my_PERL::misc::Clock';
+    use RICEDDARIO::lib::Clock;
+    my $clock = 'RICEDDARIO::lib::Clock';
     
     my $newline = pack("A32A32", "JOB_LANCIATI", "JOB_DA_LANCIARE")."\n".
                   pack("A32A32", "------------", "---------------")."\n";
@@ -108,8 +108,8 @@ sub status_monitor {
         push @$log_content, $newline;
     }
     
-    use my_PERL::misc::FileIO;
-    my $fileio = 'my_PERL::misc::FileIO';
+    use RICEDDARIO::lib::FileIO;
+    my $fileio = 'RICEDDARIO::lib::FileIO';
     my $logfile = $fileio->new();
     
     $logfile->write(filename => 'job_PBS_launcher.log', filedata => $log_content, mode => '>>');

@@ -14,8 +14,8 @@ use lib $ENV{HOME};
 
 ###################################################################
 
-use my_PERL::misc::FileIO;
-my $file_obj = my_PERL::misc::FileIO->new();
+use RICEDDARIO::lib::FileIO;
+my $file_obj = RICEDDARIO::lib::FileIO->new();
 
 
 my $path = '/home/korda/Scrivania/Profili_exp_mouse/';

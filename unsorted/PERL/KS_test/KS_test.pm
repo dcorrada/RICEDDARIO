@@ -1,4 +1,4 @@
-package my_PERL::Statistic::KS_test;
+package RICEDDARIO::lib::KS_test;
 
 # to make STDOUT flush immediately, simply set the variable
 # this can be useful if you are writing to STDOUT in a loop
@@ -424,7 +424,7 @@ END
 
 1;
 
-=head1 my_PERL::Statistic::KS_test
+=head1 RICEDDARIO::lib::KS_test
 
 KS_test: test statistisco di Kolmogorov-Smirnov
 
@@ -439,8 +439,8 @@ dettagliata consultare:
 
 =head1 Synopsis
 
-    use my_PERL::Statistic::KS_test;
-    my $obj = my_PERL::Statistic::KS_test->new();
+    use RICEDDARIO::lib::KS_test;
+    my $obj = RICEDDARIO::lib::KS_test->new();
 
     my $dist_A = [0,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
     my $dist_B = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,1,0,0];

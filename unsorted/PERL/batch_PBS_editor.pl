@@ -74,8 +74,8 @@ print "MIR files: @mir_file_list\nUTR files: "."@utr_file_list"."\n";
 croak "\n---\nfile non trovati, impossibile creare i jobs\n" unless (@mir_file_list and @utr_file_list);
 
 
-use my_PERL::PBS_manager::Scheduler;
-my $job_obj = my_PERL::PBS_manager::Scheduler->new();
+use RICEDDARIO::lib::PBS_manager::Scheduler;
+my $job_obj = RICEDDARIO::lib::PBS_manager::Scheduler->new();
 
 foreach my $mir_file (@mir_file_list) {
     foreach my $utr_file (@utr_file_list) {
@@ -83,7 +83,7 @@ foreach my $mir_file (@mir_file_list) {
         # allestisco un case_of per valutare quale metodo di predizione inserire nei job
         # 
         # il blocco CASEOF dovrà essere implementato man mano che sviluppo nuovi metodi
-        # per la classe <my_PERL::PBS_manager::Scheduler> per scrivere job file contenenti
+        # per la classe <RICEDDARIO::lib::PBS_manager::Scheduler> per scrivere job file contenenti
         # nuovi metodi di predizione; ricordarsi di aggiornare pure la variabile $usage
         # ********************************************************************************
         $_ = $method;

@@ -1,4 +1,4 @@
-package my_PERL::PBS_manager::Scheduler;
+package RICEDDARIO::lib::PBS_manager::Scheduler;
 
 # to make STDOUT flush immediately, simply set the variable
 # this can be useful if you are writing to STDOUT in a loop
@@ -11,8 +11,8 @@ use strict;
 use warnings;
 use Carp;
 use Cwd;
-use my_PERL::misc::FileIO;
-use my_PERL::misc::Clock;
+use RICEDDARIO::lib::FileIO;
+use RICEDDARIO::lib::Clock;
 our $AUTOLOAD;
 
 
@@ -420,7 +420,7 @@ END
                                                                 out => getcwd.'/'.$params{jobname}.'.log',
                                                                 ),
                                     );
-    my $file_obj = my_PERL::misc::FileIO->new();
+    my $file_obj = RICEDDARIO::lib::FileIO->new();
     
     for (my $counter = 0; $counter < scalar(@file_content); $counter++) {
         $file_content[$counter] .= "\n";
@@ -476,7 +476,7 @@ END
                                                                 prefix => getcwd.'/'.$params{jobname},
                                                                 ),
                                     );
-    my $file_obj = my_PERL::misc::FileIO->new();
+    my $file_obj = RICEDDARIO::lib::FileIO->new();
     
     for (my $counter = 0; $counter < scalar(@file_content); $counter++) {
         $file_content[$counter] .= "\n";
@@ -531,7 +531,7 @@ END
                                                                 q    => $params{mir_file},
                                                                 ),
                                     );
-    my $file_obj = my_PERL::misc::FileIO->new();
+    my $file_obj = RICEDDARIO::lib::FileIO->new();
     
     for (my $counter = 0; $counter < scalar(@file_content); $counter++) {
         $file_content[$counter] .= "\n";
@@ -549,7 +549,7 @@ sub qstat_status {
     
     my $qstat_output;$self->{_exception} = '';
     my $fails = 0; # numero di volte in cui l'accesso al server fallisce
-    my $clock = 'my_PERL::misc::Clock';
+    my $clock = 'RICEDDARIO::lib::Clock';
     
     while (1) {
         $qstat_output = qx/qstat 2>&1/;
@@ -605,7 +605,7 @@ END
     
     my $qsub_output;$self->{_exception} = '';
     my $fails = 0; # numero di volte in cui l'accesso al server fallisce
-    my $clock = 'my_PERL::misc::Clock';
+    my $clock = 'RICEDDARIO::lib::Clock';
     
     while (1) {
         $qsub_output = qx/qsub $jobname 2>&1/;
