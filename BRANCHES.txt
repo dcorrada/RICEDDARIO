@@ -1,0 +1,11 @@
+BRANCHES OF PANDORA
+
+Before createm and/or delete any remote branch please contact the admin.
+In squared brackets are listed the developers who mantain the specific branch.
+
+*** master ***
+[anybody]
+It is the main branch where all the developer's branches converge periodically.
+You must always switch to this branch and pull it if you want only use the 
+RICEDDARIO script and do not apply changes to them.
+

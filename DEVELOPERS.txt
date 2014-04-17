@@ -1,0 +1,111 @@
+*** GUIDELINES FOR ADMIN AND DEVELOPERS ***
+
+The versioning of the RICEDDARIO package is managed by git. For more information 
+please read tips and tricks at the following URL:
+
+        http://git-scm.com/book/
+
+In order to become an active member of RICEDDARIO project you must generate a 
+public/private key pair (see also "RSA.keys.txt"). Then, create a copy of your 
+public key file renamed as [user].[localhost].pub and send it to the admins.
+
+Every new developer has to register him/her credentials by updating the file
+"AUTHORS.txt" and initializing the git client:
+
+    $ git config --global user.name "John Doe"
+    $ git config --global user.email johndoe@example.com
+
+
+0. LINUX RULEZ
+Programming from Microsoft environments is strictly prohibited. Please don't 
+annoying the admin with carriage return / line feed typos.
+
+
+1. MAINTENANCE
+
+In order to mantain the package always up to date you have to switch to the 
+branch "master" and pull it periodically:
+
+    $ git checkout master
+    $ git pull origin
+
+Remember to switch to branch master before you close you session. In such way 
+you allow other local users (non developer ones) to use the stable version of 
+the package.
+
+
+2. UNTRACKING YOUR CUSTOM FILES
+
+If you have some files that you don't want to be tracked please add their 
+filename (or a regular expression) editing the file ".gitignore".
+
+
+3. CLEAN YOUR PACKAGE BEFORE START
+
+Maybe your local installation of the package grants full access to all local 
+users (ie chmod 777) and it usually happens that they accidentally apply some 
+changes to the scripts. Since they are considered non developer you are 
+allowed/encouraged to erase such changes before starting your work session:
+
+    $ git checkout -f
+
+
+4. AN EXAMPLE OF WORKFLOW
+
+Before starting to apply any change create your own branch and move to it:
+
+    $ git branch foo
+    $ git checkout foo
+
+After you have made your changes, commit them:
+
+    $ git commit -a -m "a mandatory comment about your commit"
+
+Therefore switch to the "master" branch:
+
+    $ git checkout master
+
+Remember that you cannot move to any branch if you have not committed or 
+discarded all the changes you have made.
+
+
+5. RELEASE YOUR RESULTS
+
+Once you consider that your work have reached a relevant end point you have to 
+upload your changes to the server, in order to share them:
+
+    $ git checkout master
+    $ git merge foo
+    $ git fetch
+    $ git pull origin master
+    $ git push origin master
+    $ git branch -d foo
+
+In a nutshell, you switch to your local "master" branch (git checkout master) 
+and merge your work stored in the local "foo" branch (git merge foo). 
+Afterwards, you sync with the server (git fetch) and pull your local branch 
+"master" merging those changes made by other developers in the meanwhile 
+(git pull origin master). Finally, you upload your work to the remote "master" 
+branch (git push origin master) and delete you local branch "foo" 
+(git branch -d foo).
+
+
+6. ADD OR REMOVE MULTIPLE FILES
+
+You can accomplish such task in a single step:
+
+    $ git add -A
+    $ git commit -a -m "added/removed multiple files"
+
+
+7. REMOTE NEW BRANCHES
+
+Before add any new remote branch please contact the admins. A detailed list of 
+the existing remote branches can be found in the file "BRANCHES.txt".
+
+
+8. THIRD PARTY SOFTWARE
+
+Whenever a script needs some specific library to run specify it in the 
+"README.txt" file.
+
