@@ -1,6 +1,0 @@
-ADMINS LIST:
-    Dario       CORRADA         <dario.corrada@gmail.com>
-
-DEVELOPER LIST:
-    Dario       CORRADA         <dario.corrada@gmail.com>
-
