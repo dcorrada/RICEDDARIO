@@ -4,8 +4,8 @@
 # compiled python files
 *.pyc
 
-# hidden files
-.??*
-
 # kate temporary files
 *.kate-swp
+
+# KDE Dolphin configuration file
+.directory
