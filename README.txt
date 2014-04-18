@@ -68,3 +68,4 @@ Then, launch the installer script to update your bashrc file:
 
     $ cd RICEDDARIO;
     $ ./INSTALL.pl
+
