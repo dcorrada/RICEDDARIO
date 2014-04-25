@@ -21,6 +21,13 @@ use lib $ENV{HOME};
 use Data::Dumper;
 
 ###################################################################
+# ATTENZIONE: la definizione del numero di job threads da lanciare (opzione -n dello script)
+# rappresenta un compromesso col numero di map threads lanciati dallo script <maq_pipeline.pl>
+# I job threads sono delle singole chiamate allo script <maq_pipeline.pl>.
+# Di default lancio 4 map threads da 2M di reads ognuno (x un totale di 4.48G di mem allocati)
+# su 2 job threads (4.48 X 2 = 8.96G di mem allocati).
+# OKKIO quindi a bilanciare bene map threads e job threads: il rischio è di saturare
+# tutta la RAM e imballare completamente la macchina su cui stanno girando i calcoli
 
 our $options= { };
 use Cwd;
@@ -31,12 +38,12 @@ use Thread::Semaphore;
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'threads|n=i', 'workdir|d=s');
+    GetOptions($options, 'help|h', 'threads|n=i', 'workdir|d=s', 'sleep|s=i');
     my $usage = <<END
 
 SYNOPSYS
 
-  $0 [-d path] [-n int] <shell_script_filename>
+  $0 [-d path] [-n int] [-s sec] <shell_script_filename>
 
 Cerca nella working directory tutti gli shell-script aventi come nome
 <shell_script_filename> (es. "script.sh", solitamente localizzati in
@@ -46,9 +53,15 @@ OPZIONI
 
   -n --threads <int>        numero massimo di threads da lanciare
                             contemporaneamente (def: 6)
-
   -d --workdir <string>     working directory (def: pwd)
+  -s --sleep <int>          intervallo di tempo (in secondi) entro cui
+                            vengono monitorati i threads (def: 1800)
 
+  ATTENZIONE: il carattere di protezione \\ (backslash) usato nelle
+  stringhe in questo caso diventa \\\\ (doppio backslash).
+
+  es.: "\\\\d+" individua stringhe con almeno un carattere numerico
+       (invece di usare "\\d+")
 END
     ;
     if ((exists $options->{help})||!$ARGV[0]) {
@@ -60,7 +73,7 @@ END
 ## VARIABILI GLOBALI ##
 our $working_dir = getcwd(); # path della working dir
 our $sh_job_list = [ ]; # lista dei job
-our $thread_num = ($options->{threads})? $options->{threads} : 8; # numero massimo di job threads da lanciare contemporaneamente
+our $thread_num = ($options->{threads})? $options->{threads} : 6; # numero massimo di job threads da lanciare contemporaneamente
 our $semaforo = Thread::Semaphore->new(int($thread_num));
 our $sh_file = $ARGV[0]; # nome del file shell-script da lanciare come thread singolo
 our @thr; # lista dei threads
@@ -72,13 +85,14 @@ CHECKDIR: { # check della working dir
     ($options->{workdir}) and do {
         if (chdir $options->{workdir}) {
             $working_dir = getcwd();
+            print "\n-- WORKDIR changed to <$working_dir>\n"
         } else {
             croak "pattern <$options->{workdir}> non trovato\n";
         }
     };
 }
 
-JOBLIST: { # allestisco la lista dei jobs (l'ID è il nome della cartella trovata)
+JOBLIST: {# allestisco la lista dei jobs (l'ID è il nome della cartella trovata)
     my $dh; opendir ($dh, $working_dir) or croak "\n-- ERROR <$working_dir> non aperta\n";
     my @file_list = readdir($dh); closedir $dh;
     @file_list = map (/([^\/]*)$/, @file_list);  
@@ -93,13 +107,14 @@ JOBLIST: { # allestisco la lista dei jobs (l'ID è il nome della cartella trovat
             }
         }
     }
-    # print "FILE LIST:\n"; foreach (@file_list) { print "<$_>\n"; }
-    # print "JOB LIST:\n"; foreach (@{$sh_job_list}) { print "<$_>\n"; }
+    #~ print "FILE LIST:\n"; foreach (@file_list) { print "<$_>\n"; }
+    #~ print "JOB LIST:\n"; foreach (@{$sh_job_list}) { print "<$_>\n"; }
     
 }
 
 MONITORING: { ## monitora i lo status dei job
-$daemon = threads->new(\&thread_mon);
+my $thread_mon_params = { sleep => ($options->{sleep})? $options->{sleep} : 1800 };# tempo (sec) su cui monitorare i processi
+$daemon = threads->new(\&thread_mon, $thread_mon_params);
 $daemon->detach(); # faccio in modo che il thread giri per i fatti suoi, indipendentemente dagli altri
 }
 
@@ -108,6 +123,7 @@ JOB_LAUNCH: {
         push @thr, threads->new(\&launch_thread, $job_name);
     }
     for (@thr) { $_->join() }
+    print "\n--END tutti i threads lanciati sono conclusi\n"
 }
 
 exit;
@@ -127,7 +143,8 @@ sub launch_thread {
       push (@r_list, $job_name); }
     
     my $sh_path = $working_dir . '/' . $job_name . '/' . $sh_file; # lancio il lo shell script associato al job
-    system("/bin/sh $sh_path") && do { $semaforo->up(); die ("** fail to run <$sh_path>"); };
+    my @args = ('/bin/sh', '-c', $sh_path);
+    system(@args) && do { $semaforo->up(); die ("** fail to run <$sh_path>"); };
     
     { lock @r_list; lock @f_list;
       @r_list = grep(!/^$job_name$/, @r_list);
@@ -145,32 +162,21 @@ sub date { # ritorna l'ora locale
 
 
 sub thread_mon { # monitor x valutare lo status dei thread lanciati
-    my $finished = 0;
-    my $status = 'null';
-    my $reference = 'llun';
+    my ($hash_ref) = @_; my %arg = %{$hash_ref};
+    print "\n-- THREAD monitor avviato...";
     while (1) {
-        {
-            lock @f_list;
-            $finished = scalar @f_list;
-        }
-        last if $finished >= scalar @{$sh_job_list};
-        {
-            lock @q_list;lock @r_list;
-            $reference = scalar @q_list . scalar @r_list;
-        }
-        unless ($status eq $reference) {
-            $status = $reference;
-            foreach my $line (@{&status_monitor()}) { print $line; }
-        }
+        foreach my $line (@{&status_monitor()}) { print $line; }
+        sleep $arg{sleep};
     }
 }
 
+
 # scrive un file di log in cui butta dentro man mano la lista di job
 # eseguiti e di job in coda
-
+#
 sub status_monitor {
-    my $newline = pack("A12A12A12", "QUEUED", "RUNNING", "FINISHED")."\n".
-                  pack("A12A12A12", "------------", "------------", "------------")."\n";
+    my $newline = pack("A40A40A40", "QUEUED", "RUNNING", "FINISHED")."\n".
+                  pack("A40A40A40", "------------", "---------------", "---------------")."\n";
     my $log_content = ["\n" . date . "\n", $newline ];
     
     # definisco il numero massimo di linee da scrivere in ogni tabella di log
@@ -186,7 +192,7 @@ sub status_monitor {
         
         for (my $counter = 0; $counter < $max_num_line; $counter++) {
             no warnings;
-            $newline = pack("A12A12A12", $q_list[$counter], $r_list[$counter], $f_list[$counter])."\n";
+            $newline = pack("A40A40A40", $q_list[$counter], $r_list[$counter], $f_list[$counter])."\n";
             push @$log_content, $newline;
         }
     }
