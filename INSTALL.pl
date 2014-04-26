@@ -54,6 +54,10 @@ $path_string .= "\n# ISABEL (from RICEDDARIO)\n";
 $path_string .= "export PATH=$workdir/ISABEL/bin:\$PATH\n";
 $path_string .= "export PERL5LIB=$workdir/ISABEL:\$PERL5LIB\n";
 
+# percorsi specifici per QUEST
+$path_string .= "\n# QUEST (from RICEDDARIO)\n";
+$path_string .= "export PATH=$workdir/scripting/QUEST:\$PATH\n";
+
 $path_string .= "\n";
 
 # aggiorno il file bashrc
