@@ -225,6 +225,10 @@ sub launch_thread {
     my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir) = @_;
 
     my $jobline;
+    my $queue_time;
+    my $running_time;
+
+    $queue_time = time;
 
     { # metto il job nella lista dei queued
         lock @queued;
@@ -236,6 +240,9 @@ sub launch_thread {
     }
 
     while (${$semaforo} < $threads) { sleep 1 }; # attendo che si liberino threads
+
+    $queue_time = time - $queue_time;
+    $running_time = time;
 
     for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
 #     print "$threads taken (${$semaforo} available)\n";
@@ -257,6 +264,25 @@ sub launch_thread {
     } else {
         qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
     }
+
+    $running_time = time - $running_time;
+    open (LOGFILE, '>>' . $logfile);
+    my @timex = localtime($queue_time);
+    $queue_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
+    @timex = localtime($running_time);
+    $running_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
+    my $summary = <<END
+*** QUEST SUMMARY ***
+EXECUTABLE.....: $cmd_line
+WORKING DIR....: $workdir
+THREADS USED...: $threads
+QUEUED TIME....: $queue_time
+RUNNING TIME...: $running_time
+
+END
+    ;
+    print LOGFILE $summary;
+    close LOGFILE;
 
     for (1..$threads) { $semaforo->up() }; # libero tanti threads quanti richiesti
 #     print "$threads released (${$semaforo} available)\n";
