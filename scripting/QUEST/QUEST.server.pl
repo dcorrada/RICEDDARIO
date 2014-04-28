@@ -96,9 +96,9 @@ INIT: {
     } else {
         print "Configuration settings are stored in <$conf_file>\n\n";
     }
-    
+
     # inizializzo il server leggendo il file di configurazione
-    open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t"); 
+    open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
     while (my $newline = <CONF>) {
         if ($newline =~ /^#/) {
             next; # skippo le righe di commento
@@ -111,10 +111,10 @@ INIT: {
         }
     }
     close CONF;
-    
+
     # verifico se sono root
     my $username = $ENV{'USER'};
-    if ($username eq 'root') { 
+    if ($username eq 'root') {
         $superuser = 1;
     } else {
         undef $superuser;
@@ -126,10 +126,10 @@ END
         ;
         print $warn;
     }
-    
+
     # inizializzo il semaforo
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
-    
+
     printf("%s server initialized\n", clock());
 }
 
@@ -148,22 +148,22 @@ END
         'Reuse'           => $confs{'reuse'}
     ) or croak("$error\t");
     printf("%s server is listening\n", clock());
-    
+
     while (1) {
         # lascio girare il server fino a che non riceve un SIGTERM
         goto FINE if ($poweroff);
-        
+
         # metto il server in ascolto
         my $client = $socket->accept();
         if ($client) {
             # raccolgo la request dal client
             my $recieved_data;
             $client->recv($recieved_data,1024);
-            
+
             if ($recieved_data eq 'status') { # richiesta della lista dei job
                 my $log = job_monitor();
                 $client->send($log);
-                
+
             } elsif ($recieved_data =~ /user/ ) { # richiesta di sottomissione job
                 my @params = split(';', $recieved_data);
                 my %client_order;
@@ -171,7 +171,7 @@ END
                     my ($key, $value) = $order =~ /(.+)\|(.+)/;
                     $client_order{$key} = $value;
                 }
-                
+
                 # verifico se il server ha le credenziali per lanciare il job
                 my $username = $ENV{'USER'};
                 unless ($superuser) {
@@ -185,14 +185,14 @@ END
                         next;
                     }
                 }
-                
+
                 # genero un jobid
                 my @chars = ('A'..'Z', 0..9, , 0..9);
                 my $jobid = join('', map $chars[rand @chars], 0..7);
-                
+
                 # genero un file di log in cui raccogliero' l'output del job
                 my $logfile = sprintf("%s/QUEST.job.%s.log", $client_order{'workdir'}, $jobid);
-                
+
                 # sottometto il job
                 my $job = threads->new(\&launch_thread,
                     $client_order{'script'},
@@ -203,11 +203,11 @@ END
                     $client_order{'workdir'}
                 );
                 $job->detach();
-                
-                my $mess = sprintf("%s job %s queued, STDOUT will be written to <%s>",
+
+                my $mess = sprintf("%s job %s queued, STDOUT/STDERR will be written to <%s>",
                     clock(), $jobid, $logfile);
                 $client->send($mess);
-                
+
             } else {
                 next;
             }
@@ -223,54 +223,44 @@ FINE: {
 
 sub launch_thread {
     my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir) = @_;
-    
+
     my $jobline;
-    
+
     { # metto il job nella lista dei queued
         lock @queued;
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>", 
+            "%s  % 8s  %s  %s  <%s>",
             clock(), $user, $threads, $jobid, $cmd_line
         );
         push (@queued, $jobline);
     }
-    
+
     while (${$semaforo} < $threads) { sleep 1 }; # attendo che si liberino threads
-    
+
     for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
 #     print "$threads taken (${$semaforo} available)\n";
-    
+
     { # metto il job nella lista dei running e lo tolgo dai queued
         lock @queued; lock @running;
         @queued = grep(!/$jobid/, @queued);
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>", 
+            "%s  % 8s  %s  %s  <%s>",
             clock(), $user, $threads, $jobid, $cmd_line
         );
         push (@running, $jobline);
     }
-    
-    # lancio del job
+
+    # lancio del job, redirigo STDOUT e STDERR sul file di log
     my $joblog;
     if ($superuser) {
-        $joblog = qx/cd $workdir;sudo -u $user $cmd_line/;
+        qx/cd $workdir; sudo -u $user touch $logfile; sudo -u $user $cmd_line >> $logfile 2>&1/;
     } else {
-        $joblog = qx/cd $workdir; $cmd_line/;
+        qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
     }
-    
+
     for (1..$threads) { $semaforo->up() }; # libero tanti threads quanti richiesti
 #     print "$threads released (${$semaforo} available)\n";
-    
-    # scrivo il file di log
-    if ($superuser) {
-        qx/sudo -u $user touch $logfile/;
-    } else {
-        qx/touch $logfile/;
-    }
-    open(JOBLOG, ">$logfile");
-    print JOBLOG $joblog;
-    close JOBLOG;
-    
+
     { # rimuovo il job dalla lista dei running
         lock @running;
         @running = grep(!/$jobid/, @running);
@@ -280,7 +270,8 @@ sub launch_thread {
 sub job_monitor {
     my $log;
     {   lock @queued; lock @running;
-        $log = "\n--- JOB RUNNING ---\n";
+        $log = sprintf("\nAvalaible threads %d of %d\n", ${$semaforo}, $confs{'threads'});
+        $log .= "\n--- JOB RUNNING ---\n";
         foreach my $jobid (@running) {
             $log .= "$jobid\n";
         }
