@@ -1,0 +1,16 @@
+*** release 14.4.a ***
+
+* KILL OPTION: submitted job can be killed with '-k' option; check of orphan 
+  processes at server shutdown.
+
+* LOG MESSAGES: requests from client are tracked by the server; client prints 
+  quote when ends up.
+
+* CONFIGURATION: the "/etc/QUEST.conf" stores less parameters.
+
+* INTERNALS: the client listens server until receive an over&out signal; jobs 
+  are no longer detached when submitted
+
+*** release 14.4 ***
+
+* INITIAL RELEASE

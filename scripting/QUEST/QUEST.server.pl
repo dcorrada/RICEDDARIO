@@ -34,15 +34,12 @@ our $conf_file = '/etc/QUEST.conf';
 our %confs = (
     'host'       => '127.0.0.1',        # IP address del localhost
     'port'       => '6090',             # porta
-    'protocol'   => 'tcp',              # protocollo di connessione
-    'sockets'    => '1',                # numero di sockets in ascolto
-    'reuse'      => '1',                # riutilizzare il socket dopo averlo chiuso?
     'threads'    => '8',                # numero massimo di threads concorrenti
 );
 
 our $socket; # l'oggetto per gestire la comunicazione client/server
 
-# lo script intecetta segnali di interrupt e li redirige ad una subroutine (v. sotto)
+# lo script intecetta segnali di interrupt e li redirige ad una subroutine (v. sotto)our @children;
 $SIG{'INT'} = \&sigIntHandler; # il tipico Ctrl+C
 $SIG{'TERM'} = \&sigIntHandler; # il segnale di kill dato con top (ie SIGTERM 15)
 our $poweroff; # la variabile gestita dalla suboutine &sigIntHandler
@@ -51,6 +48,8 @@ our $superuser; # definisce se usare il server come superuser
 
 our $semaforo;
 our @thr; # lista dei threads
+our %killerlist;
+our @children;
 our (@queued, @running) :shared; # lista dei job accodati e running
 
 ## SBLOG ##
@@ -59,7 +58,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.4
+release 14.4.a
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -98,7 +97,7 @@ INIT: {
     }
     
     # inizializzo il server leggendo il file di configurazione
-    open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t"); 
+    open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
     while (my $newline = <CONF>) {
         if ($newline =~ /^#/) {
             next; # skippo le righe di commento
@@ -114,7 +113,7 @@ INIT: {
     
     # verifico se sono root
     my $username = $ENV{'USER'};
-    if ($username eq 'root') { 
+    if ($username eq 'root') {
         $superuser = 1;
     } else {
         undef $superuser;
@@ -143,9 +142,9 @@ END
     $socket = new IO::Socket::INET (
         'LocalHost'       => $confs{'host'},
         'LocalPort'       => $confs{'port'},
-        'Proto'           => $confs{'protocol'},
-        'Listen'          => $confs{'sockets'},
-        'Reuse'           => $confs{'reuse'}
+        'Proto'           => 'tcp',     # protocollo di connessione
+        'Listen'          => 1,         # numero di sockets in ascolto
+        'Reuse'           => 1          # riciclare i socket?
     ) or croak("$error\t");
     printf("%s server is listening\n", clock());
     
@@ -160,11 +159,81 @@ END
             my $recieved_data;
             $client->recv($recieved_data,1024);
             
-            if ($recieved_data eq 'status') { # richiesta della lista dei job
+            # richiesta della lista dei job
+            if ($recieved_data eq 'status') {
                 my $log = job_monitor();
                 $client->send($log);
                 
-            } elsif ($recieved_data =~ /user/ ) { # richiesta di sottomissione job
+            # richiesta di uccidere job
+            } elsif ($recieved_data =~ /killer/ ) {
+                my ($jobid, $user_client) = $recieved_data =~ /killer\|([\w\d]+);user\|([\w\d]+)/;
+                my $mess;
+                
+                if (exists $killerlist{$jobid}) {
+                    my $job = $killerlist{$jobid};
+                    if ($job->is_running) {
+                        
+                        # verifico le credenziali
+                        unless ($superuser && ($user_client eq 'root')) {
+                            my $match;
+                            {
+                                lock @queued; lock @running;
+                                my @joblist;
+                                push(@joblist, @queued, @running);
+                                ($match) = grep(/$jobid/, @joblist);
+                            }
+                            my ($job_owner) = $match =~ /\]\s+([\w\d]+)/;
+                            unless ($user_client eq $job_owner) {
+                                $mess = <<END
+E- the owner of job [$jobid] is $job_owner, you are not allowed to kill it
+END
+                                ;
+                                goto ENDKILL;
+                            } 
+                        }
+                        
+                        printf("%s killing job [%s] requested by [%s]\n", clock(), $jobid, $user_client);
+                        $client->send('server is killing...');
+                        
+                        # ammazzo eventuali processi figli
+                        my $string = "QUEST.job.$jobid.log";
+                        my $psaux = qx/ps aux \| grep "$string"/;
+                        my ($parent_pid) = $psaux =~ /^$ENV{'USER'}\s*(\d+)/;
+                        undef @children;
+                        push (@children, $parent_pid);
+                        &getcpid($parent_pid);
+                        @children = sort {$b <=> $a} @children;
+                        while (my $child = shift(@children)) {
+                            print "\tkilling child pid $child...\n";
+                            kill 15, $child;
+                            $client->send('.');
+                            sleep 1; # aspetto un poco...
+                        }
+                        
+                        $job->kill('TERM');
+                        $client->send('.');
+                        sleep 2; # aspetto un poco...
+                        if ($job->is_running) {
+                            $mess = "E- unable to kill job [$jobid]";
+                        } else {
+                            {
+                                lock @queued; lock @running;
+                                @queued = grep(!/$jobid/, @queued);
+                                @running = grep(!/$jobid/, @running);
+                            }
+                            $mess = "\njob [$jobid] has been killed";
+                        }
+                    } else {
+                        $mess = "job [$jobid] has already accomplished";
+                    }
+                } else {
+                    $mess = "E- job [$jobid] not found";
+                }
+                
+                ENDKILL: { $client->send($mess); };
+                
+            # richiesta di sottomettere job
+            } elsif ($recieved_data =~ /user/ ) {
                 my @params = split(';', $recieved_data);
                 my %client_order;
                 while (my $order = shift @params) {
@@ -182,7 +251,6 @@ user can submit job (not as [$client_order{'user'}]).
 END
                         ;
                         $client->send($mess);
-                        next;
                     }
                 }
                 
@@ -202,40 +270,57 @@ END
                     $jobid,
                     $client_order{'workdir'}
                 );
-                $job->detach();
+                # $job->detach();
                 
-                my $mess = sprintf("%s job %s queued, STDOUT will be written to <%s>",
+                # metto il job nella killerlist
+                $killerlist{$jobid} = $job;
+                
+                printf("%s job [%s] submitted by [%s]\n", clock(), $jobid, $client_order{'user'});
+                my $mess = sprintf("%s job [%s] queued,\n STDOUT/STDERR will be written to <%s>",
                     clock(), $jobid, $logfile);
                 $client->send($mess);
                 
             } else {
                 next;
             }
+            
+            # messaggio di "passo e chiudo" dal server al client
+            $client->send('QUEST.over&out');
         }
     }
 }
 
 FINE: {
     close $socket if ($socket);
-    printf("%s QUEST server stopped\n", clock());
+    printf("\n%s QUEST server stopped\n\n", clock());
     exit;
 }
 
 sub launch_thread {
     my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir) = @_;
     
+    # Thread 'cancellation' signal handler
+    $SIG{'TERM'} = sub { threads->exit(); };
+    
     my $jobline;
+    my $queue_time;
+    my $running_time;
+    
+    $queue_time = time;
     
     { # metto il job nella lista dei queued
         lock @queued;
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>", 
+            "%s  % 8s  %s  %s  <%s>",
             clock(), $user, $threads, $jobid, $cmd_line
         );
         push (@queued, $jobline);
     }
     
     while (${$semaforo} < $threads) { sleep 1 }; # attendo che si liberino threads
+    
+    $queue_time = time - $queue_time;
+    $running_time = time;
     
     for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
 #     print "$threads taken (${$semaforo} available)\n";
@@ -250,26 +335,35 @@ sub launch_thread {
         push (@running, $jobline);
     }
     
-    # lancio del job
+    # lancio del job, redirigo STDOUT e STDERR sul file di log
     my $joblog;
     if ($superuser) {
-        $joblog = qx/cd $workdir;sudo -u $user $cmd_line/;
+        qx/cd $workdir; sudo -u $user touch $logfile; sudo -u $user $cmd_line >> $logfile 2>&1/;
     } else {
-        $joblog = qx/cd $workdir; $cmd_line/;
+        qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
     }
+    
+    $running_time = time - $running_time;
+    open (LOGFILE, '>>' . $logfile);
+    my @timex = localtime($queue_time);
+    $queue_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
+    @timex = localtime($running_time);
+    $running_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
+    my $summary = <<END
+*** QUEST SUMMARY ***
+EXECUTABLE.....: $cmd_line
+WORKING DIR....: $workdir
+THREADS USED...: $threads
+QUEUED TIME....: $queue_time
+RUNNING TIME...: $running_time
+
+END
+    ;
+    print LOGFILE $summary;
+    close LOGFILE;
     
     for (1..$threads) { $semaforo->up() }; # libero tanti threads quanti richiesti
 #     print "$threads released (${$semaforo} available)\n";
-    
-    # scrivo il file di log
-    if ($superuser) {
-        qx/sudo -u $user touch $logfile/;
-    } else {
-        qx/touch $logfile/;
-    }
-    open(JOBLOG, ">$logfile");
-    print JOBLOG $joblog;
-    close JOBLOG;
     
     { # rimuovo il job dalla lista dei running
         lock @running;
@@ -280,7 +374,8 @@ sub launch_thread {
 sub job_monitor {
     my $log;
     {   lock @queued; lock @running;
-        $log = "\n--- JOB RUNNING ---\n";
+        $log = sprintf("\nAvalaible threads %d of %d\n", ${$semaforo}, $confs{'threads'});
+        $log .= "\n--- JOB RUNNING ---\n";
         foreach my $jobid (@running) {
             $log .= "$jobid\n";
         }
@@ -295,7 +390,21 @@ sub job_monitor {
 # questa subroutine serve per intercettare un segnale di interrupt e comunicarlo
 # allo script inizializzando il valore della variabile globale $poweroff
 sub sigIntHandler {
-    print"\n";
+    print "\n";
+    foreach my $jobid (keys %killerlist) {
+        my $job = $killerlist{$jobid};
+        if ($job->is_running) {
+            my ($match) = grep("$jobid", @running);
+            my ($script) = $match =~ /<(.+)>$/;
+            my $warn = <<END
+
+W- job [$jobid] was running while KILL signal arrived, check for accidental 
+   orphans generated from <$script>
+END
+            ;
+            print $warn;
+        }
+    }
     $poweroff = 1;
 }
 
@@ -309,4 +418,14 @@ sub clock {
     $sec = sprintf("%02d", $sec);
     my $date = '[' . ($anno+1900)."/$mese/$giom $ore:$min:$sec]";
     return $date;
+}
+
+sub getcpid() {
+    my ($pid) = @_;
+    my $log = qx/pgrep -P $pid/;
+    my @cpids = split("\n", $log);
+    foreach my $child (@cpids) {
+        push(@children, $child);
+        &getcpid($child);
+    }
 }

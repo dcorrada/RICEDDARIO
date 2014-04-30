@@ -1,6 +1,6 @@
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.4
+release 14.4.a
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada@gmail.com>
 
@@ -12,69 +12,147 @@ QUEST is a client/server application for handling the batch submission of
 several executable files (ie jobs) over a single machine.
 
 
-*** SERVER ***
-The server script can be launched either as super user or local user. If the 
-server is launched as local user only that local user can submit the jobs from 
-the client script. Otherwise, if the server is launched as super user, all the 
-local users can submit their jobs.
+1. SERVER STARTUP
 
--- CONFIGURATION FILE
-The configuration file is defined as '/etc/QUEST.conf', it will be generated at 
-the first start of the server. The parameters you will asked to configure are 
+The server script should be launched as super user:
+
+    $ sudo su
+    $ QUEST.server.pl
+
+At first time you will be asked to edit the configuration file:
+
+    QUEST server is not yet configured, do you want to proceed? [y/N] y
+
+Just press ENTER for keeping the default values:
+
+        host     [127.0.0.1]: 
+        port     [6090]: 
+        threads  [8]: 
+
+Optimal value for "threads" parameter depends on your hardware performance, 
+usually it should be setted with the amount of avalaible CPUs (or even 2x). 
+Afterwards, the server is ready to accept the client requests:
+
+    [2014/04/30 17:37:33] server initialized
+    [2014/04/30 17:37:33] server is listening
+
+Server can be stopped by press CTRL+C:
+
+    [2014/04/30 17:56:08] QUEST server stopped
+
+WARNING: it may happen that in the meanwhile some job is still running, in this 
+case the server warns you about orphans:
+
+    W- job [WH6OHKBF] was running while KILL signal arrived, check for accidental 
+    orphans generated from </home/dario/tmp/demo/parent.sh>
+
+    [2014/04/30 17:58:51] QUEST server stopped
+
+
+2. SUBMITTING AND MANAGING JOBS
+
+The client script should be launched as local user. In order to reproduce the 
+subsequent example of commands make a copy of the demo folder:
+
+    $ cp -r /usr/local/PANDORA/QUEST/demo/ .
+    $ cd demo
+
+This folder contains three shell scripts. The file "ps.monitor.sh" is a simple 
+monitor for showing the processes which run during this sample session. The file 
+"parent.sh" is the script that we will submit, it launches in background another 
+script ("child.sh"). To submit a job just simply type:
+
+    $ QUEST.client.pl parent.sh
+
+    [2014/04/30 18:38:31] job [3HRIT36O] queued,
+    STDOUT/STDERR will be written to </home/dario/tmp/demo/QUEST.job.3HRIT36O.log>
+
+As well the server returns to the client a message specifying the job identifier 
+(jobID) and a log file that will be created to capture all the stuff coming from 
+the script. When the job is terminated the log file will contains something like 
 the following:
 
-    host        the IP address of the local host (usually 127.0.0.1)
-    
-    port        the port by which client and server communicate
-    
-    protocol    the communication protocol
-    
-    reuse       opened sockets will be reused
-    
-    sockets     how many sockets to open
-    
-    threads     how many threads will be managed by the server (usually the 
-                number of avalaible processors)
+    singing a lullaby for my child
+    child goes to sleep...
+    parent goes to sleep...
+    child awake
+    parent awake
+    *** QUEST SUMMARY ***
+    EXECUTABLE.....: /home/dario/tmp/demo/parent.sh
+    WORKING DIR....: /home/dario/tmp/demo
+    THREADS USED...: 1
+    QUEUED TIME....: 00:00:00
+    RUNNING TIME...: 00:16:40
 
+The trailing lines below "*** QUEST SUMMARY ***" show the summaries about your 
+submitted job. 
 
-*** CLIENT ***
-The client script allows you to submit a job or show the list of jobs already 
-submitted.
+By default the client assign one thread per script. If you forecast to use more 
+than a single thread you can specify it using the '-n' option:
 
--- SUBMITTING YOUR JOBS
-First check that the file you want to submit as a job is executable. The 
-characters like ';' or '|' are used by internal commands of the server, you must 
-avoid to use these for the name of your file. Then, move to your working 
-directory and submit your job:
+    $ QUEST.client.pl -n 5 parent.sh
 
-    foo$ cd workdir
-    foo$ QUEST.client.pl -n 5 myscript.sh
+WARNING: the characters like ';' or '|' are used by internal commands of the 
+server, you must avoid to use these for the name of your script files.
 
-The execution of file 'myscript.sh' has been submitted, and you have reserved 
-for your job 5 threads (-n option, default is 1). A log file of the standard 
-output will be written in your working directory once your job terminates.
+If the number of threads required per job exceeds the amount of avalaible 
+threads an error message will be returned:
 
--- MONITORING YOUR JOBS
-In order to show the job list handled by the server:
+    E- Number of threads required (5) is higher than allowed (4)
+            at /usr/local/PANDORA/QUEST/QUEST.client.pl line 110
 
-    foo$ QUEST.client.pl -l
+Now shall we try to submit more than one job. For the sake of simplicity, in 
+this example we submit the same script multiple times (as if we want to get 
+several different jobs):
 
-You will obtain an output such this one:
+    $ QUEST.client.pl -n 4 parent.sh
+    [...]
+    $ QUEST.client.pl -n 2 parent.sh
+    [...]
+    $ QUEST.client.pl -n 3 parent.sh
+
+Unlike the previous example, each of the three jobs herein submitted does not 
+exceed the amount of avalaible threads. However, the sum of the required threads 
+(9) exceeds it. Therefore, some of these job will automatically queued until 
+running jobs release a sufficient number of threads. The option '-l' allows you 
+to check the jobs list and their respective status:
+
+    $ QUEST.client.pl -l
+
+    Avalaible threads 0 of 4
 
     --- JOB RUNNING ---
-    [2014/04/25 12:42:55]       bar  4  I4O1ES06  </home/bar/minescript.sh>
+    [2014/04/30 21:53:26]     dario  4  7578G9E6  </home/dario/tmp/demo/parent.sh>
+
     --- JOB QUEUED ---
-    [2014/04/26 17:29:33]       foo  5  K8S9RHRF  </home/foo/myscript.sh>
+    [2014/04/30 21:53:31]     dario  2  KFB3FM99  </home/dario/tmp/demo/parent.sh>
+    [2014/04/30 21:53:37]     dario  3  21WM0G8G  </home/dario/tmp/demo/parent.sh>
 
-In this example your job has been queued, since another user has already taken 4 
-threads and, by now, no sufficient threads are avalaible to run your job. When 
-the job of user 'bar' will be finished, 4 threads will be released and your job 
-will start. The job lines show, respectively: the date when the job has been 
-queued/started; the user name; the number of threads required for the job; the 
-job ID assigned by the server; the executable file coupled with the job.
+From the jobs list we can also view the list of jobIDs, so you can kill your 
+running/queued jobs every time:
 
--- KILLING YOUR JOBS
-The QUEST server tracks your jobs but not the child processes which can start 
-from your coupled executable files. Therefore, if you want to kill a job 
-erroneously submitted, you should kill your executable (using bash commands like 
-top). Afterwards, the server will see your job as accomplished.
+    $ QUEST.client.pl -k
+
+    server is killing.....
+    job [KFB3FM99] has been killed
+
+
+3. SERVER LOGS
+
+If you switch to the terminal in which the server has been launched realtime log 
+messages are printed in order to track the activities of the client:
+
+    [2014/04/30 22:16:08] server initialized
+    [2014/04/30 22:16:08] server is listening
+    [2014/04/30 22:16:23] job [X8Q8B839] submitted by [dario]
+    [2014/04/30 22:16:34] killing job [X8Q8B839] requested by [dario]
+            killing child pid 17265...
+            killing child pid 17264...
+            killing child pid 17263...
+            killing child pid 17262...
+            killing child pid 17261...
+            killing child pid 17257...
+    ^C
+    
+    [2014/04/30 22:17:12] QUEST server stopped
+

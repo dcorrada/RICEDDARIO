@@ -35,7 +35,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.4
+release 14.4.a
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -50,25 +50,29 @@ END
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'list|l','threads|n=i');
+    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s');
     my $usage = <<END
 SYNOPSYS
 
-  $0 [-n int] <script_filename>
-  
+  $0 -n 4 ./script.sh
+
   $0 -l
+  
+  $0 -k 752ENRBU
 
 
 OPTIONS
 
   -n <int>      suggested number of threads used (default: 1)
-  
+
   -l            list of jobs running/queued
+
+  -k <jobid>    kill a job
 
 END
     ;
     if (exists $options->{'help'}) {
-        print $usage; 
+        print $usage;
         goto FINE;
     }
 }
@@ -88,9 +92,9 @@ INIT: {
         }
     }
     close CONF;
-    
+
     # configurazione delle opzioni
-    unless ($ARGV[0] || exists $options->{'list'}) {
+    unless ($ARGV[0] || exists $options->{'list'} || exists $options->{'killer'}) {
         print "\nNothing to do";
         goto FINE;
     }
@@ -106,6 +110,8 @@ INIT: {
         if ($options->{'threads'} > $confs{'threads'}) {
             croak(sprintf("\nE- Number of threads required (%d) is higher than allowed (%d)\n\t", $options->{'threads'}, $confs{'threads'}));
         }
+    } elsif (exists $options->{'killer'}) {
+        $options->{'user'} = $ENV{'USER'};
     }
 }
 
@@ -114,29 +120,60 @@ CORE: {
     $socket = new IO::Socket::INET (
         'PeerAddr'      => $confs{'host'},
         'PeerPort'      => $confs{'port'},
-        'Proto'         => $confs{'protocol'}
+        'Proto'         => 'tcp'
     ) or croak("\nE- Cannot open socket, maybe the server is down?\n\t");
     
-    # messaggio da spedire al server
-    my $mess;
+    my $mess; # messaggio da spedire al server
+    
+    # richiedo la lista dei job attivi
     if (exists $options->{'list'}) {
         $mess = 'status';
+    
+    # ammazzo un job
+    } elsif (exists $options->{'killer'}) {
+        $mess = sprintf("%s|%s;%s|%s", 
+            'killer',   $options->{'killer'}, 
+            'user',     $options->{'user'}
+        );
+    
+    # sottometto un job
     } else {
         foreach my $key (keys %{$options}) {
             $mess .= "$key|$options->{$key};";
         }
         chop($mess);
     }
+
+    $socket->send($mess); # mando un messaggio sul server
     
-    # chiamata sul server
-    $socket->send($mess);
+    # rimango in attesa di una risposta
     my $recieved_data = 'null';
-    $socket->recv($recieved_data,1024);
-    print $recieved_data;
+    while (1) {
+        $socket->recv($recieved_data,1024);
+        my $log = $recieved_data;
+        $log =~ s/(QUEST.over&out)$//;
+        print $log;
+        last if ($recieved_data =~ /QUEST.over&out/); # ho ricevuto il segnale "passo e chiudo" dal server, posso uscire
+    }
 }
 
 FINE: {
     close $socket if ($socket);
-    print "\n\n*** TSEUQ ***\n";
+    
+    # citazione conclusiva
+    my $quote_file = qx/which QUEST.server.pl/;
+    chomp $quote_file;
+    $quote_file =~ s/QUEST\.server\.pl$/quotes\.txt/;
+    my $sep = $/;
+    $/ = ">>\n";
+    open(CITA, "<$quote_file") or do { print "\n"; exit; };
+    my @quotes = <CITA>;
+    close CITA;
+    my $tot = scalar @quotes;
+    $/ = $sep;
+    my $end = "\n\n--\n" . $quotes[int(rand($tot))] . "\n";
+    $end =~ s/(<<|>>)//g;
+    print $end;
+    
     exit;
 }
