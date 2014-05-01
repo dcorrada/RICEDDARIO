@@ -1,0 +1,17 @@
+$VAR1 = bless( {
+                 '_exception' => '',
+                 '_csv_file' => '',
+                 '_password' => '*********',
+                 '_filename' => '',
+                 '_query_string' => '',
+                 '_log' => 0,
+                 '_errfile' => '[homedir]/.SPARTA/SPARTA.log',
+                 '_filedata' => [],
+                 '_host' => '127.0.0.1',
+                 '_table_name' => '',
+                 '_port' => '3306',
+                 '_database' => 'sparta',
+                 '_workdir' => '[cwd]',
+                 '_user' => '*******'
+               }, 'SPARTA::lib::Foo' );
+

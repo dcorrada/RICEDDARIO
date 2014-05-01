@@ -1,0 +1,323 @@
+.
+├── BRENDA/
+│   ├── bin/
+│   │   ├── BRENDA.pl*
+│   │   └── BRENDA.statistics.pl*
+│   ├── data/
+│   │   └── BRENDA_list.csv
+│   ├── lib/
+│   │   ├── FileIO.pm*
+│   │   ├── Generic_class.pm*
+│   │   └── Rambo.pm*
+│   └── README.txt
+├── EMMA/
+│   ├── EMMA/
+│   │   ├── bin/
+│   │   │   └── EMMA.reloaded.pl*
+│   │   └── lib/
+│   │       ├── components.pl*
+│   │       ├── FileIO.pm*
+│   │       └── Generic_class.pm*
+│   ├── RAGE/
+│   │   ├── bin/
+│   │   │   └── RAGE.pl*
+│   │   └── lib/
+│   │       ├── FileIO.pm*
+│   │       └── Generic_class.pm*
+│   ├── README.txt
+│   └── RELEASE.NOTES.txt
+├── INSTALL.pl*
+├── ISABEL/
+│   ├── bin/
+│   │   ├── blocks
+│   │   ├── diagoxxl
+│   │   └── ISABEL.pl*
+│   ├── data/
+│   │   ├── leaprc.ff03.v11
+│   │   ├── leaprc.ff03.v9
+│   │   ├── min.in
+│   │   └── mm_pbsa.in
+│   └── lib/
+│       ├── FileIO.pm*
+│       └── Generic_class.pm*
+├── job_scheduling/
+│   ├── job_PBS_launcher.pl*
+│   ├── PBSmanager/
+│   │   ├── launch-pbs.py*
+│   │   └── Lib/
+│   │       └── pbshelp.py*
+│   ├── qstat.pl*
+│   ├── qstat.refresh.sh*
+│   ├── qsub.pl*
+│   └── sh_scheduler.pl*
+├── lib/
+│   ├── Clock.pm*
+│   ├── DBmanager.pm*
+│   ├── FileIO.pm*
+│   ├── Generic_class.pm*
+│   ├── Kabat.pm*
+│   ├── MatrixDiff.pm*
+│   ├── Parse_Array.pm
+│   └── PBS_manager/
+│       └── Scheduler.pm*
+├── MyMir/
+│   ├── data/
+│   │   ├── MyMir.CrossLinks.rda
+│   │   ├── MyMir.OverReps.rda
+│   │   ├── MyMir.UniPop.rda
+│   │   └── universe.mm9.rda
+│   ├── DESCRIPTION
+│   ├── INDEX
+│   ├── man/
+│   │   ├── BioMart.list-class.Rd
+│   │   ├── Clusterama-class.Rd
+│   │   ├── Clusterama.Rd
+│   │   ├── Cluster.Dataframes.Rd
+│   │   ├── CornaOut.df-class.Rd
+│   │   ├── CrossLinks-class.Rd
+│   │   ├── Dist.Heatmap.Rd
+│   │   ├── Fetch.CrossLinks.Rd
+│   │   ├── Fetch.UniPop.Rd
+│   │   ├── Gene2Path.df-class.Rd
+│   │   ├── GO2Term.df-class.Rd
+│   │   ├── Hopach.Run.Rd
+│   │   ├── MDS.Rd
+│   │   ├── MyMir.CrossLinks.Rd
+│   │   ├── MyMir.OverReps.Rd
+│   │   ├── MyMir-package.Rd
+│   │   ├── MyMir.UniPop.Rd
+│   │   ├── OverallTest.Rd
+│   │   ├── OverReps-class.Rd
+│   │   ├── Partitional.Clustering.Rd
+│   │   ├── Population.df-class.Rd
+│   │   ├── QueryBuild.Population.Rd
+│   │   ├── QuerySelect-class.Rd
+│   │   ├── RefSeq2Ensembl.list-class.Rd
+│   │   ├── SemanticSimilarity.Rd
+│   │   ├── SQL.list-class.Rd
+│   │   ├── Term2Target.Rd
+│   │   ├── Trans2GO.list-class.Rd
+│   │   ├── UniPop-class.Rd
+│   │   ├── universe.mm9.Rd
+│   │   ├── UpdateDB.Clusterama.Rd
+│   │   └── UpdateDB.OverReps.Rd
+│   ├── NAMESPACE
+│   └── R/
+│       ├── classes.R
+│       ├── Clusterama.R
+│       ├── OverallTest.R
+│       ├── QueryBuild.Population.R
+│       ├── QueryBuild.Universe.R
+│       ├── SemanticSimilarity.R
+│       ├── Term2Target.R
+│       └── zzz.R
+├── QUEST/
+│   ├── demo/
+│   │   ├── child.sh*
+│   │   ├── parent.sh*
+│   │   └── ps.monitor.sh*
+│   ├── QUEST.client.pl*
+│   ├── QUEST.server.pl*
+│   ├── quotes.txt*
+│   ├── README.txt
+│   └── RELEASE.NOTES.txt
+├── README.txt
+├── sequence/
+│   ├── aln2fasta.pl*
+│   ├── Global_Align.pl*
+│   └── identity.similarity.pl*
+├── SPARTA/
+│   ├── bin/
+│   │   ├── allestimento_simulazione.pl*
+│   │   ├── BENDER.batch.pl*
+│   │   ├── BENDER.pl*
+│   │   ├── blocks.exe*
+│   │   ├── covasum.awk*
+│   │   ├── diagoxxl*
+│   │   ├── diagoxxl_static_64bit*
+│   │   ├── extrcoord.sh*
+│   │   ├── GROMACS2AMBER.pl*
+│   │   ├── HOTSPOTS.pl*
+│   │   ├── MATRIX.pl*
+│   │   ├── PDB_debugger.pl*
+│   │   ├── rmsdist.diff.pl*
+│   │   ├── rmsdist.square.local.c*
+│   │   ├── rmsdist.square.local.out*
+│   │   ├── SPARTA.pl*
+│   │   ├── STEP1_genbox.pl*
+│   │   └── STEP2_minimizzazione.sh*
+│   ├── data/
+│   │   ├── addressbook.csv*
+│   │   ├── db_connect.txt*
+│   │   ├── min.in*
+│   │   ├── mm_pbsa.in*
+│   │   ├── quotes.txt*
+│   │   ├── splash.ico.png*
+│   │   └── splash.png*
+│   ├── docs/
+│   │   ├── CHANGELOG.txt*
+│   │   ├── generic_class_attributes.txt*
+│   │   ├── MindMap.mm*
+│   │   └── WORKFLOW.odg*
+│   ├── examples/
+│   │   ├── QUERIES.sql*
+│   │   ├── SIGNALS.sql*
+│   │   └── SUMMARY.sql*
+│   └── lib/
+│       ├── Artemis.pm*
+│       ├── Chilon.pm*
+│       ├── DBmanager.pm*
+│       ├── FileIO.pm*
+│       ├── Generic_class.pm*
+│       ├── Kabat.pm*
+│       ├── KS_test.pm*
+│       ├── Leonidas.before.rankprod.pm*
+│       ├── Leonidas.pm*
+│       ├── MatrixDiff.pm*
+│       ├── Menelaus.pm*
+│       └── Theodorus.pm*
+├── structure/
+│   └── PDB_debugger.pl*
+├── tarballs/
+│   ├── EMMA.13.4.mazinga.tar.gz
+│   ├── EMMA.14.4.lbpc7.tar.gz
+│   ├── ISABEL.13.4.mazinga.tar.gz*
+│   ├── ISABEL.14.4.mazinga.tar.gz
+│   ├── ISABEL.14.4.satellite.tar.gz
+│   ├── MyMir_2.10-05.tar.gz
+│   ├── QUEST.14.4.a.tar.gz
+│   └── QUEST.14.4.tar.gz
+├── third_parties/
+│   ├── AMBER/
+│   │   ├── amb2gmx.traj.converter.RUBBEN.sh
+│   │   └── amb2gmx.traj.converter.sh
+│   ├── BOWTIE/
+│   │   ├── bowtie_input_prepare.pl*
+│   │   ├── bowtie_pipeline.pl*
+│   │   ├── bowtie_scheduler.pl*
+│   │   ├── create_index_files.pl*
+│   │   ├── mapdata2DB.pl*
+│   │   └── Parse_Array.pm*
+│   ├── Delphi/
+│   │   ├── elec/
+│   │   │   ├── default.crg
+│   │   │   ├── default.siz
+│   │   │   └── delphi.param
+│   │   └── HOWTO.txt
+│   ├── GROMACS/
+│   │   ├── allestimento_simulazione.pl*
+│   │   ├── BENDER.pl*
+│   │   ├── covasum.awk
+│   │   ├── diffmat.gnuplot
+│   │   ├── dssp_analyze.pl*
+│   │   ├── edit_ndx.pl*
+│   │   ├── extrcoord.sh
+│   │   ├── GROMACS2AMBER.pl*
+│   │   ├── MDP_files/
+│   │   │   ├── energy.minimization.mdp
+│   │   │   ├── equilibration.npt.mdp
+│   │   │   ├── equilibration.nvt.mdp
+│   │   │   └── MD.70ns.NPT.mdp
+│   │   ├── PBS_files/
+│   │   │   ├── gromacs_ilbestia.sh
+│   │   │   └── gromacs_kappuwai.sh
+│   │   ├── rmsdist.diff.pl*
+│   │   ├── rmsdist.gnuplot
+│   │   ├── rmsdist.square.local.c
+│   │   ├── rmsdist.square.local.out
+│   │   ├── STEP1_genbox.pl*
+│   │   ├── STEP2_minimizzazione.sh
+│   │   └── xpm2normal.csh
+│   ├── MAQ/
+│   │   ├── maq_input_prepare.pl*
+│   │   ├── maq_pipeline.pl
+│   │   └── maq_scheduler.pl*
+│   ├── MODELLER/
+│   │   ├── allineamento.ligando.ali
+│   │   ├── allineamento.multicatena.ali
+│   │   ├── dope.evaluation.py*
+│   │   ├── DOPEgraph.gnuplot
+│   │   ├── MODELLER.raw.py*
+│   │   ├── MODELLER.refine.py*
+│   │   ├── model_parallelized/
+│   │   │   ├── align.pir
+│   │   │   ├── pilot.py*
+│   │   │   ├── snd12.pdb
+│   │   │   ├── snd23.pdb
+│   │   │   ├── snd34.pdb
+│   │   │   ├── snd45.pdb
+│   │   │   ├── snd56.pdb
+│   │   │   ├── snd67.pdb
+│   │   │   └── snd78.pdb
+│   │   ├── restrained.job.py*
+│   │   └── secondary_structure.py*
+│   ├── PyMol/
+│   │   └── HYDROPHOBIC_PATCHES.py*
+│   └── VMD/
+│       ├── macro.tcl
+│       ├── pbcbox.tcl
+│       ├── pbctools.tcl
+│       ├── sscache.tcl
+│       └── sstruct.tcl
+├── TREE.txt
+├── unsorted/
+│   ├── MySQL/
+│   │   ├── cross_info.sql
+│   │   ├── fill_DB.sh
+│   │   ├── multi.sql
+│   │   ├── ortholog_join.sql
+│   │   └── pippo.sql
+│   ├── PERL/
+│   │   ├── batch_PBS_editor.pl*
+│   │   ├── consensus.pl*
+│   │   ├── Dataset_generator.pm*
+│   │   ├── DBI/
+│   │   │   ├── DBI_select.pl*
+│   │   │   ├── es01_fetching.pl*
+│   │   │   ├── es02_binding.pl*
+│   │   │   ├── pippo.pl*
+│   │   │   └── upload.files.pl*
+│   │   ├── KS_test/
+│   │   │   ├── KS_test.pdf
+│   │   │   └── KS_test.pm*
+│   │   ├── moduli_perl_installati.pl*
+│   │   ├── nrdb.pl*
+│   │   ├── RGASP/
+│   │   │   ├── input_prepare.pl*
+│   │   │   ├── maq_pipeline.pl*
+│   │   │   └── maq_scheduler.pl*
+│   │   ├── SOCKETS/
+│   │   │   ├── chat_client.pl*
+│   │   │   ├── chat_server.pl*
+│   │   │   ├── client.pl*
+│   │   │   ├── client_simple.pl*
+│   │   │   ├── server.pl*
+│   │   │   └── server_simple.pl*
+│   │   └── valori_exp.pl*
+│   └── R/
+│       ├── clusterama.R
+│       ├── clustering.R
+│       ├── creazione_packages.R
+│       ├── dendrogram.R
+│       ├── GeneAnswers_chunks.R
+│       ├── GOfuncs.R
+│       ├── igraph_tests.R
+│       ├── ODBC.R
+│       ├── PLOT_punti_dimensione_variabile.R
+│       ├── RMySQL.R
+│       ├── SAM_Significance Analysis of Microarray.R
+│       ├── script_R_diffexp.R
+│       └── Trial_and_Error.R
+├── web_services/
+│   ├── abnum.pl*
+│   ├── PDB2CASTp.pl*
+│   ├── RCSB_query.pl*
+│   ├── sendmail.pl*
+│   └── WEB_POST_REQUESTs.pl*
+└── WORKFLOW/
+    ├── AnExampleOfPipeline.pl*
+    ├── mm2xml.pl*
+    ├── sh_scheduler.pl*
+    └── WORKFLOW.MAP.mm
+
+58 directories, 262 files

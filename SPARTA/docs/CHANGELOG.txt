@@ -1,0 +1,74 @@
+*** SPARTA - release 12.06.alpha ***
+>UPDATES
+2012-06-26: analysis mode
+    - implementation of samba mode
+>PATCHES
+2012-06-27: analysis mode
+    - implementation of crossrefs mode
+2012-06-26: new dependecies
+    - Statistics::Descriptive Perl package
+
+*** SPARTA - release 12.05.alpha ***
+>UPDATES
+2012-05-08: analysis mode
+    - implementation of bender mode
+
+*** SPARTA - release 12.04.alpha ***
+>UPDATES
+2012-04-23: analysis mode
+    - [ene|flu]dist modes: statistic test (Kolmogorov-Smirnov) of hotspots distributions between apo and holo forms, for each Ig domain
+2012-04-19: analysis mode
+    - Structural annotation added to .pml files
+2012-04-13: analysis mode
+    - New statistic test for [ene|flu]stat modes; distribution analysis can be now performed by choosing parametric (Student T test) or non-parametric (Kolmogorov-Smirnov test, default); see also Leonidas::hotspot_stats 
+2012-04-12: analysis mode
+    - New implementation of [ene|flu]dist modes, based on two sample rank products algorithm (see Koziol, FEBS letters, 2010, 584: 4481-4484)
+>PATCHES
+2012-04-12: analysis mode
+    - Changes in [ene|flu]stat modes; histogram show all hotspots per domain, nor grouped by intra-/inter-chain
+2012-04-04: analysis mode
+    - Code optimization, IERPs and RMRPs analyses are performed by the same methods of Leonidas, Chilon and Theodorus
+
+*** SPARTA - release 12.03.alpha ***
+>UPDATES
+2012-03-30: analysis modes
+    - subroutines for investiganting RMRPs 
+2012-03-26: database maintenance mode (fludecomp, fludist, flumatrix)
+    - new subroutines in order to collect data of global distance fluctuations (see EMMA.pl for more details)
+2012-03-12: analysis modes (cluster)
+    - clusters found by GMX g_cluster analysis
+2012-03-06: analysis modes
+    - subroutines for investiganting IERP (enestat)
+>PATCHES
+2012-03-29: database maintenance mode (enedecomp)
+    - table "decomp" is now renamed as "enedecomp", cutoff filter is disabled
+2012-03-26: database maintenance mode (fluctuations)
+    - table "flucts" is now replaced by table "rmsf", containing only data related to Root Mean Square Fluctuation
+
+*** SPARTA - release 12.02.alpha ***
+>UPDATES
+2012-02-22: analysis modes
+    - eneclust
+    - enedist
+2012-02-09: reinit mode
+    - database upload of data obtained from energy decomposition analysis (see also the ISABEL.pl script)
+2012-02-03: CHUNKTEST block
+    - memory usage monitor
+>PATCHES
+2012-02-16: multithreading
+    - demanding of multithread processes to each object have been created
+2012-02-09: memory starvation
+    - garbage collection for multithread processes
+
+*** SPARTA - release 12.01.alpha ***
+> UPDATES
+2012-01-31: flumatrix subroutine
+    - first multithreading approach: seems good...
+2012-01-24: analysis modes
+    - first release
+2012-01-11: subroutine "structure"
+    - re-definition of region 'CDR-L3'
+    - new annotations (framework regions among variable domains,       C-terms, intra-domain hinge regions)
+> PATCHES
+2012-01-11: PDB structure 1YQV
+    - The N-term of the light chain is a MET where an ASP residue is expected from abnum web-service. A new PDB file (~/simulazioni/dataset/PDBapo/1YQV_patched.pdb) was built in order to run abnum service. Nevertheless, SPARTA DB and the other job still rely on the original structure.
