@@ -1,0 +1,62 @@
+--- EMMA - Empathy Motions along fluctuation MAtrix ---
+
+*** START [driven] [2014/05/01 17:39:58] ***
+RAGE command "/home/korda/RICEDDARIO/EMMA/RAGE/bin/RAGE.pl -min 6 -max 14 -clust complete -dist manhattan -file ../rmsd.xpm"
+Optimal clustering is composed of 8 clusters
+== CLUSTER 4 (83 timeframes) ==
+Average silhouette: 0.652
+Best timeframe [29920] (sil: 0.795)
+*** STOP [driven] [2014/05/01 17:41:54] ***
+resident: 38.700 MB	shared: 0.080 MB	stack: 0.000 MB
+
+*** START [ave] [2014/05/01 17:41:54] ***
+*** STOP [ave] [2014/05/01 17:42:08] ***
+resident: 9.432 MB	shared: 0.124 MB	stack: 0.000 MB
+
+*** START [flumat] [2014/05/01 17:42:08] ***
+adjacent pairs within a range of 1 residue(s) (see [/home/korda/RICEDDARIO/EMMA/EMMA/lib/components.pl])
+filtering adjacent pairs to coordination value 144.374
+*** STOP [flumat] [2014/05/01 17:42:19] ***
+resident: 12.820 MB	shared: 0.124 MB	stack: 0.000 MB
+
+*** START [diago] [2014/05/01 17:42:19] ***
+*** STOP [diago] [2014/05/01 17:42:20] ***
+resident: 0.176 MB	shared: 0.064 MB	stack: 0.000 MB
+
+*** START [forecast] [2014/05/01 17:42:20] ***
+internal parameters (see [/home/korda/RICEDDARIO/EMMA/EMMA/lib/components.pl])
+$block_dim = 10; $overlap_thr = 0.50; $coverage_thr = 0.75
+eigenvectors cumulative coverage:
+[V001] 31.7%
+[V002] 48.8%
+[V004] 54.5%
+[V005] 65.4%
+[V006] 72%
+[V007] 76.4%
+[V010] 80.1%
+[V011] 84.1%
+*** STOP [forecast] [2014/05/01 17:42:35] ***
+resident: 8.444 MB	shared: 0.128 MB	stack: 0.000 MB
+
+*** START [minimal] [2014/05/01 17:42:35] ***
+*** STOP [minimal] [2014/05/01 17:42:37] ***
+resident: 12.784 MB	shared: 0.092 MB	stack: 0.000 MB
+
+*** START [distrib] [2014/05/01 17:42:37] ***
+*** STOP [distrib] [2014/05/01 17:42:37] ***
+resident: 3.692 MB	shared: 0.100 MB	stack: 0.000 MB
+
+*** START [total] [2014/05/01 17:42:37] ***
+No range defined, skipping
+*** STOP [total] [2014/05/01 17:42:37] ***
+resident: 9.172 MB	shared: 0.080 MB	stack: 0.000 MB
+
+*** START [propensity] [2014/05/01 17:42:37] ***
+distance cutoff 30 A
+threshold DF value 59.07
+*** STOP [propensity] [2014/05/01 17:42:39] ***
+resident: 9.980 MB	shared: 0.128 MB	stack: 0.000 MB
+
+*** START [cytoscape] [2014/05/01 17:42:39] ***
+*** STOP [cytoscape] [2014/05/01 17:42:41] ***
+resident: 11.944 MB	shared: 0.104 MB	stack: 0.000 MB
