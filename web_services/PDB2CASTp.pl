@@ -296,7 +296,7 @@ MAIL: {
             # di default il parser salva mail e attachments in due file separati
             my $entity = $parser->parse_data($imap->message_string($message));
             # elimino il messaggio dalla casella di posta
-#             $imap->delete_message($message);
+            $imap->delete_message($message);
             $jobcount++;
         }
     }
