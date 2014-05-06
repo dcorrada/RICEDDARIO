@@ -58,7 +58,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.4.a
+release 14.5.a
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -195,19 +195,27 @@ END
                         printf("%s killing job [%s] requested by [%s]\n", clock(), $jobid, $user_client);
                         $client->send('server is killing...');
                         
-                        # ammazzo eventuali processi figli
-                        my $string = "QUEST.job.$jobid.log";
-                        my $psaux = qx/ps aux \| grep "$string"/;
-                        my ($parent_pid) = $psaux =~ /^$ENV{'USER'}\s*(\d+)/;
-                        undef @children;
-                        push (@children, $parent_pid);
-                        &getcpid($parent_pid);
-                        @children = sort {$b <=> $a} @children;
-                        while (my $child = shift(@children)) {
-                            print "\tkilling child pid $child...\n";
-                            kill 15, $child;
-                            $client->send('.');
-                            sleep 1; # aspetto un poco...
+                        # ammazzo eventuali processi figli se il job sta girando
+                        my $is_running = 'null';
+                        {
+                            lock @running;
+                            my ($greppo) = grep(/$jobid/, @running);
+                            $is_running = $greppo if ($greppo);
+                        }
+                        unless ($is_running eq 'null') {
+                            my $string = "QUEST.job.$jobid.log";
+                            my $psaux = qx/ps aux \| grep "$string"/;
+                            my ($parent_pid) = $psaux =~ /^$ENV{'USER'}\s*(\d+)/;
+                            undef @children;
+                            push (@children, $parent_pid);
+                            &getcpid($parent_pid);
+                            @children = sort {$b <=> $a} @children;
+                            while (my $child = shift(@children)) {
+                                print "\tkilling child pid $child...\n";
+                                kill 15, $child;
+                                $client->send('.');
+                                sleep 1; # aspetto un poco...
+                            }
                         }
                         
                         $job->kill('TERM');
