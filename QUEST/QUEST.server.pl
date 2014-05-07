@@ -58,7 +58,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.a
+release 14.5.b
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -195,13 +195,30 @@ END
                         printf("%s killing job [%s] requested by [%s]\n", clock(), $jobid, $user_client);
                         $client->send('server is killing...');
                         
-                        # ammazzo eventuali processi figli se il job sta girando
+                        # verifico se il job sta girando
                         my $is_running = 'null';
                         {
                             lock @running;
                             my ($greppo) = grep(/$jobid/, @running);
-                            $is_running = $greppo if ($greppo);
+                            if ($greppo) {
+                                $is_running = $greppo;
+                                
+                                # verifico se si tratta di un job Schrodinger
+                                if ($greppo =~ /\[Schrodinger /) {
+                                    my ($schrodinger_jobid) = $greppo =~ /\[Schrodinger (.+)\]/;
+                                    $mess = <<END
+
+killing the Schrodinger's cat is unsafe, try to use the following commad:
+
+    \$ \$SCHRODINGER/jobcontrol -kill $schrodinger_jobid
+END
+                                    ;
+                                    goto ENDKILL;
+                                }
+                            }
                         }
+                        
+                        # ammazzo eventuali processi figli se il job sta girando
                         unless ($is_running eq 'null') {
                             my $string = "QUEST.job.$jobid.log";
                             my $psaux = qx/ps aux \| grep "$string"/;
@@ -276,7 +293,8 @@ END
                     $client_order{'threads'},
                     $client_order{'user'},
                     $jobid,
-                    $client_order{'workdir'}
+                    $client_order{'workdir'},
+                    $client_order{'schrodinger'}
                 );
                 # $job->detach();
                 
@@ -305,14 +323,18 @@ FINE: {
 }
 
 sub launch_thread {
-    my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir) = @_;
+    my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir, $schrodinger) = @_;
     
     # Thread 'cancellation' signal handler
-    $SIG{'TERM'} = sub { threads->exit(); };
+    $SIG{'TERM'} = sub { 
+        printf("%s job [%s] killed\n", clock(), $jobid);
+        threads->exit();
+    };
     
     my $jobline;
     my $queue_time;
     my $running_time;
+    my $signature = ' ';
     
     $queue_time = time;
     
@@ -327,6 +349,8 @@ sub launch_thread {
     
     while (${$semaforo} < $threads) { sleep 1 }; # attendo che si liberino threads
     
+    printf("%s job [%s] started\n", clock(), $jobid);
+    
     $queue_time = time - $queue_time;
     $running_time = time;
     
@@ -337,8 +361,8 @@ sub launch_thread {
         lock @queued; lock @running;
         @queued = grep(!/$jobid/, @queued);
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>", 
-            clock(), $user, $threads, $jobid, $cmd_line
+            "%s  % 8s  %s  %s  <%s> %s", 
+            clock(), $user, $threads, $jobid, $cmd_line, $signature
         );
         push (@running, $jobline);
     }
@@ -346,9 +370,46 @@ sub launch_thread {
     # lancio del job, redirigo STDOUT e STDERR sul file di log
     my $joblog;
     if ($superuser) {
-        qx/cd $workdir; sudo -u $user touch $logfile; sudo -u $user $cmd_line >> $logfile 2>&1/;
+            qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$cmd_line >> $logfile 2>&1"/;
     } else {
         qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
+    }
+    
+    if ($schrodinger eq 'true') { # blocco ad-hoc per i job della Schrodinger
+        
+        # leggo il logfile per catturare il JobID assegnato da Schrodinger e lo appunto come nota aggiuntiva nella lista dei jobs
+        open(LOG, "<$logfile");
+        my $content = [ <LOG> ];
+        close LOG;
+        while (my $newline = shift @{$content}) {
+            chomp $newline;
+            my ($string) = $newline =~ m/^JobId: (.+)$/g;
+            if ($string) {
+                $signature = $string;
+            }
+        }
+        
+        {
+            lock @running;
+            @running = grep(!/$jobid/, @running);
+            $jobline = sprintf(
+                "%s  % 8s  %s  %s  <%s> [Schrodinger %s]", 
+                clock(), $user, $threads, $jobid, $cmd_line, $signature
+            );
+            push (@running, $jobline);
+        }
+        
+        # i job della Schrodinger fanno da se' un detach una volta partiti e lo script finirebbe, genero un loop che guarda se il monitor di Schrodinger controlla il JobID specifico
+        my $is_running = 1;
+        while ($is_running) {
+            my $pslog = qx/ps aux | grep "$signature"/;
+            my @procs = split("\n", $pslog);
+            if (scalar @procs > 2) {
+                sleep 1;
+            } else {
+                undef $is_running;
+            }
+        }
     }
     
     $running_time = time - $running_time;
@@ -377,6 +438,8 @@ END
         lock @running;
         @running = grep(!/$jobid/, @running);
     }
+    
+    printf("%s job [%s] finished\n", clock(), $jobid);
 }
 
 sub job_monitor {

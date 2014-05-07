@@ -1,3 +1,11 @@
+*** release 14.5.b ***
+
+* CLIENT OPTIONS: '-s' option for specifying Schrodinger Suite jobs.
+
+* LOG MESSAGES: start and finish of the jobs are tracked by the server.
+
+* INTERNALS: the scripts are launched by "sudo su [user] -c" sintax.
+
 *** release 14.5.a ***
 
 * INTERNALS: while killing, server looks for child processes only for active 
@@ -5,7 +13,7 @@
 
 *** release 14.4.a ***
 
-* KILL OPTION: submitted job can be killed with '-k' option; check of orphan 
+* CLIENT OPTIONS: submitted job can be killed with '-k' option; check of orphan 
   processes at server shutdown.
 
 * LOG MESSAGES: requests from client are tracked by the server; client prints 
