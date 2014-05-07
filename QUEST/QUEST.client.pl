@@ -35,7 +35,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.a
+release 14.5.b
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -50,7 +50,7 @@ END
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s');
+    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s', 'schrodinger|s');
     my $usage = <<END
 SYNOPSYS
 
@@ -68,6 +68,9 @@ OPTIONS
   -l            list of jobs running/queued
 
   -k <jobid>    kill a job
+  
+  -s            specify that the job comes from Schrondinger Suite, please read 
+                the README.txt file in order to write a correct script file
 
 END
     ;
@@ -109,6 +112,11 @@ INIT: {
         }
         if ($options->{'threads'} > $confs{'threads'}) {
             croak(sprintf("\nE- Number of threads required (%d) is higher than allowed (%d)\n\t", $options->{'threads'}, $confs{'threads'}));
+        }
+        if (exists $options->{'schrodinger'}) {
+            $options->{'schrodinger'} = 'true';
+        } else {
+            $options->{'schrodinger'} = 'false';
         }
     } elsif (exists $options->{'killer'}) {
         $options->{'user'} = $ENV{'USER'};
