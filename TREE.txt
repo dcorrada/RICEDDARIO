@@ -1,4 +1,6 @@
-.
+ven  9 mag 2014, 09.40.02, CEST
+
+./
 ├── BRENDA/
 │   ├── bin/
 │   │   ├── BRENDA.pl*
@@ -11,6 +13,24 @@
 │   │   └── Rambo.pm*
 │   └── README.txt
 ├── EMMA/
+│   ├── demo/
+│   │   ├── inputs/
+│   │   │   ├── cluster.log
+│   │   │   ├── rmsd-clust.xpm
+│   │   │   ├── rmsd-dist.xvg
+│   │   │   ├── rmsd.xpm
+│   │   │   ├── rmsd.xvg
+│   │   │   ├── topol.gro
+│   │   │   ├── topol.tpr
+│   │   │   └── traj.xtc
+│   │   └── outputs/
+│   │       ├── cluster.summary.csv
+│   │       ├── CP.matrix.png
+│   │       ├── DF.matrix.png
+│   │       ├── dist.matrix.png
+│   │       ├── EMMA.log
+│   │       ├── RAGE.cluster.log
+│   │       └── RankAggreg.png
 │   ├── EMMA/
 │   │   ├── bin/
 │   │   │   └── EMMA.reloaded.pl*
@@ -178,15 +198,6 @@
 │       └── Theodorus.pm*
 ├── structure/
 │   └── PDB_debugger.pl*
-├── tarballs/
-│   ├── EMMA.13.4.mazinga.tar.gz
-│   ├── EMMA.14.4.lbpc7.tar.gz
-│   ├── ISABEL.13.4.mazinga.tar.gz*
-│   ├── ISABEL.14.4.mazinga.tar.gz
-│   ├── ISABEL.14.4.satellite.tar.gz
-│   ├── MyMir_2.10-05.tar.gz
-│   ├── QUEST.14.4.a.tar.gz
-│   └── QUEST.14.4.tar.gz
 ├── third_parties/
 │   ├── AMBER/
 │   │   ├── amb2gmx.traj.converter.RUBBEN.sh
@@ -320,4 +331,4 @@
     ├── sh_scheduler.pl*
     └── WORKFLOW.MAP.mm
 
-58 directories, 262 files
+60 directories, 269 files
