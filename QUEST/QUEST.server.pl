@@ -50,7 +50,10 @@ our $semaforo;
 our @thr; # lista dei threads
 our %killerlist;
 our @children;
-our (@queued, @running) :shared; # lista dei job accodati e running
+our (@queued, @running, @sorted) :shared; # lista dei job accodati e running
+
+our $maxsubmission = 1000; # ho notato che dopo 1020 job sottomessi il server va in bomba (???)
+our $submitted = 0E0;
 
 ## SBLOG ##
 
@@ -58,7 +61,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.b
+release 14.5.c
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -130,6 +133,7 @@ END
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
     
     printf("%s server initialized\n", clock());
+    
 }
 
 CORE: {
@@ -193,7 +197,6 @@ END
                         }
                         
                         printf("%s killing job [%s] requested by [%s]\n", clock(), $jobid, $user_client);
-                        $client->send('server is killing...');
                         
                         # verifico se il job sta girando
                         my $is_running = 'null';
@@ -204,8 +207,8 @@ END
                                 $is_running = $greppo;
                                 
                                 # verifico se si tratta di un job Schrodinger
-                                if ($greppo =~ /\[Schrodinger /) {
-                                    my ($schrodinger_jobid) = $greppo =~ /\[Schrodinger (.+)\]/;
+                                if ($greppo =~ /\[Schrodinger: /) {
+                                    my ($schrodinger_jobid) = $greppo =~ /\[Schrodinger: (.+)\]/;
                                     $mess = <<END
 
 killing the Schrodinger's cat is unsafe, try to use the following commad:
@@ -220,9 +223,16 @@ END
                         
                         # ammazzo eventuali processi figli se il job sta girando
                         unless ($is_running eq 'null') {
-                            my $string = "QUEST.job.$jobid.log";
-                            my $psaux = qx/ps aux \| grep "$string"/;
-                            my ($parent_pid) = $psaux =~ /^$ENV{'USER'}\s*(\d+)/;
+                            my $parent_pid;
+                            {
+                                lock @running;
+                                my ($greppo) = grep(/$jobid/, @running);
+                                ($parent_pid) = $greppo =~ /\[PID: (\d+)\]/;
+                                unless ($parent_pid) {
+                                    $mess = "E- unable to find PID for job [$jobid]";
+                                    goto ENDKILL;
+                                }
+                            }
                             undef @children;
                             push (@children, $parent_pid);
                             &getcpid($parent_pid);
@@ -230,24 +240,10 @@ END
                             while (my $child = shift(@children)) {
                                 print "\tkilling child pid $child...\n";
                                 kill 15, $child;
-                                $client->send('.');
                                 sleep 1; # aspetto un poco...
                             }
                         }
-                        
                         $job->kill('TERM');
-                        $client->send('.');
-                        sleep 2; # aspetto un poco...
-                        if ($job->is_running) {
-                            $mess = "E- unable to kill job [$jobid]";
-                        } else {
-                            {
-                                lock @queued; lock @running;
-                                @queued = grep(!/$jobid/, @queued);
-                                @running = grep(!/$jobid/, @running);
-                            }
-                            $mess = "\njob [$jobid] has been killed";
-                        }
                     } else {
                         $mess = "job [$jobid] has already accomplished";
                     }
@@ -259,6 +255,19 @@ END
                 
             # richiesta di sottomettere job
             } elsif ($recieved_data =~ /user/ ) {
+                
+                $submitted++;
+                if ($submitted > $maxsubmission) {
+                    my $mess = <<END
+WARNING: the server has collected $maxsubmission jobs. You should restart the 
+server before submitting another job.
+END
+                    ;
+                    $client->send($mess);
+                    $client->send('QUEST.over&out');
+                    next;
+                }
+                
                 my @params = split(';', $recieved_data);
                 my %client_order;
                 while (my $order = shift @params) {
@@ -326,7 +335,13 @@ sub launch_thread {
     my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir, $schrodinger) = @_;
     
     # Thread 'cancellation' signal handler
-    $SIG{'TERM'} = sub { 
+    $SIG{'TERM'} = sub {
+        {
+            lock @queued; lock @running; lock @sorted;
+            @queued = grep(!/$jobid/, @queued);
+            @running = grep(!/$jobid/, @running);
+            @sorted = grep(!/$jobid/, @sorted);
+        }
         printf("%s job [%s] killed\n", clock(), $jobid);
         threads->exit();
     };
@@ -339,17 +354,34 @@ sub launch_thread {
     $queue_time = time;
     
     { # metto il job nella lista dei queued
-        lock @queued;
+        lock @queued; lock @sorted;
         $jobline = sprintf(
             "%s  % 8s  %s  %s  <%s>",
             clock(), $user, $threads, $jobid, $cmd_line
         );
         push (@queued, $jobline);
+        
+        # metto il job nella scaletta dei job che dovranno partire
+        my $position = sprintf("%04d%012d-%s", $threads, time, $jobid);
+        push(@sorted,$position);
+        @sorted = sort {$a cmp $b} @sorted;
     }
     
-    while (${$semaforo} < $threads) { sleep 1 }; # attendo che si liberino threads
-    
-    printf("%s job [%s] started\n", clock(), $jobid);
+    # attendo che si liberino threads e che, contestualmente, il job in coda sia in cima alla scaletta
+    my $waitasecond = 1;
+    while ($waitasecond) { 
+        if (${$semaforo} >= $threads) {
+            {
+                lock @sorted;
+                my $ontop = $sorted[0];
+                if ($ontop =~ /$jobid/) {
+                    shift @sorted;
+                    undef $waitasecond;
+                }
+            }
+        }
+        sleep 1;
+    }
     
     $queue_time = time - $queue_time;
     $running_time = time;
@@ -367,25 +399,30 @@ sub launch_thread {
         push (@running, $jobline);
     }
     
+    printf("%s job [%s] started\n", clock(), $jobid);
+    
     # lancio del job, redirigo STDOUT e STDERR sul file di log
     my $joblog;
     if ($superuser) {
-            qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$cmd_line >> $logfile 2>&1"/;
+        qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$cmd_line >> $logfile 2>&1"/;
     } else {
         qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
     }
     
     if ($schrodinger eq 'true') { # blocco ad-hoc per i job della Schrodinger
         
-        # leggo il logfile per catturare il JobID assegnato da Schrodinger e lo appunto come nota aggiuntiva nella lista dei jobs
-        open(LOG, "<$logfile");
-        my $content = [ <LOG> ];
-        close LOG;
-        while (my $newline = shift @{$content}) {
-            chomp $newline;
-            my ($string) = $newline =~ m/^JobId: (.+)$/g;
+        # leggo il logfile per catturare il JobID assegnato da Schrodinger
+        my $waitforjobid = 1;
+        while ($waitforjobid) {
+            my $string = qx/grep "JobId:" $logfile/;
+            chomp $string;
             if ($string) {
-                $signature = $string;
+                ($signature) = $string =~ /JobId: (.+)/;
+                undef $waitforjobid;
+                # una volta che ottengo il JobID aspetto ancora un po' (se facessi partire subito un top cercando un processo contenente il JobID come stringa non troverei nulla)
+                sleep 5;
+            } else {
+                sleep 1; # continuo a ciclare fino a quando non ottengo un JobID
             }
         }
         
@@ -393,7 +430,7 @@ sub launch_thread {
             lock @running;
             @running = grep(!/$jobid/, @running);
             $jobline = sprintf(
-                "%s  % 8s  %s  %s  <%s> [Schrodinger %s]", 
+                "%s  % 8s  %s  %s  <%s> [Schrodinger: %s]", 
                 clock(), $user, $threads, $jobid, $cmd_line, $signature
             );
             push (@running, $jobline);
@@ -404,8 +441,11 @@ sub launch_thread {
         while ($is_running) {
             my $pslog = qx/ps aux | grep "$signature"/;
             my @procs = split("\n", $pslog);
-            if (scalar @procs > 2) {
-                sleep 1;
+            @procs = grep(!/ps aux/, @procs);
+            @procs = grep(!/grep/, @procs);
+#             print Dumper \@procs;
+            if (@procs) {
+                sleep 5;
             } else {
                 undef $is_running;
             }
@@ -445,6 +485,29 @@ END
 sub job_monitor {
     my $log;
     {   lock @queued; lock @running;
+        
+        # modifico la lista dei running fornendo il PID invece del path dello script lanciato
+        for (my $i = 0; $i < scalar @running; $i++) {
+            my $newline = $running[$i];
+            if ($newline =~ /<.+>/) {
+                my ($jobid, $script) = $newline =~ /(\w{8})  <(.+)>/;
+                if ($newline =~ /\[Schrodinger:/) {
+                    $newline =~ s/<.+> //;
+                    $running[$i] = $newline;
+                } else {
+                    my $string = "QUEST.job.$jobid.log";
+                    my $psaux = qx/ps aux \| grep -P "bash -c $script >> .*$string"/;
+                    my @procs = split("\n", $psaux);
+                    my ($match) = grep(!/grep/, @procs);
+                    if ($match) {
+                        my ($pid) = $match =~ /\w+\s*(\d+)/;
+                        $newline =~ s/<.+>/[PID: $pid]/;
+                        $running[$i] = $newline;
+                    }
+                }
+            }
+        }
+        
         $log = sprintf("\nAvalaible threads %d of %d\n", ${$semaforo}, $confs{'threads'});
         $log .= "\n--- JOB RUNNING ---\n";
         foreach my $jobid (@running) {
@@ -458,22 +521,28 @@ sub job_monitor {
     return $log
 }
 
+
 # questa subroutine serve per intercettare un segnale di interrupt e comunicarlo
 # allo script inizializzando il valore della variabile globale $poweroff
 sub sigIntHandler {
     print "\n";
-    foreach my $jobid (keys %killerlist) {
-        my $job = $killerlist{$jobid};
-        if ($job->is_running) {
-            my ($match) = grep("$jobid", @running);
-            my ($script) = $match =~ /<(.+)>$/;
-            my $warn = <<END
+    {
+        lock @running;
+        foreach my $jobid (keys %killerlist) {
+            my $job = $killerlist{$jobid};
+            if ($job->is_running) {
+                my ($match) = grep(/$jobid/, @running);
+                $match && do {
+                    my ($pid) = $match =~ /(\[PID: \d+\])/;
+                    my $warn = <<END
 
 W- job [$jobid] was running while KILL signal arrived, check for accidental 
-   orphans generated from <$script>
+orphans generated from $pid
 END
-            ;
-            print $warn;
+                    ;
+                    print $warn;
+                }
+            }
         }
     }
     $poweroff = 1;
@@ -491,7 +560,7 @@ sub clock {
     return $date;
 }
 
-sub getcpid() {
+sub getcpid {
     my ($pid) = @_;
     my $log = qx/pgrep -P $pid/;
     my @cpids = split("\n", $log);
