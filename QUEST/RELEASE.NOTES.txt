@@ -1,3 +1,15 @@
+*** release 14.5.c ***
+
+* LOG MESSAGES: in the joblist the PID of the main processes launched is showed (for running jobs only).
+
+* INTERNALS: job killing based on parent pid and not on jobID.
+
+* JOB LIST: job priority is attributed first to thread required and then to submission date
+
+* SCHRODINGER: jobs that come from Schrodinger Suite (ie '-s' option) are delayed in order to retrieve a JobId from Schrodinger's jobcontrol tool.
+
+* SUBMISSION LIMIT: no more than 1,000 jobs can be submitted, afterwards server need to be restarted.
+
 *** release 14.5.b ***
 
 * CLIENT OPTIONS: '-s' option for specifying Schrodinger Suite jobs.

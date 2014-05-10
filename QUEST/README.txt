@@ -187,3 +187,27 @@ Such notes are the JobIDs (e.g. _lbpc7-0-536a338b_) assigned by the Schrodinger 
         $ $SCHRODINGER/jobcontrol -kill lbpc7-0-536a338b
     
 You are encouraged to kill Schrodinger jobs from the _jobcontrol_ tool when they are already started (ie _running_). Those jobs still _queued_ can be killed as usual by the `-k` option.
+
+### 2. 3. Batch submission
+
+The QUEST server does not handle more than a thousand of submitted jobs. With the release 14.5.c a warning message will be sent to the client if the quota has been exceeded:
+
+    WARNING: the server has collected 1000 jobs. You should restart the 
+    server before submitting another job.
+
+Moreover, if you plan to use a bot for multiple submission, you must keep in mind to insert a delay between the QUEST client calls (e.g.: add a "sleep" of 1sec before):
+
+    #!/usr/bin/perl
+    
+    opendir DH, '/home/dario/tmp';
+    my @scripts = grep { /myscript.\d+.sh/ } readdir(DH);
+    closedir DH;
+    
+    foreach my $script (@scripts) {
+        sleep 1;
+        my $log = qx/clear; \/usr\/local\/QUEST\/QUEST.client.pl $script/;
+        print "$log\n";
+    }
+    
+    exit;
+
