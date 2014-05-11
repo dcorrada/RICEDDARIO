@@ -10,11 +10,12 @@ At first time you will be asked to edit the configuration file:
 
 Just press `ENTER` for keeping the default values:
 
-    host     [127.0.0.1]: 
+    host     [127.0.0.1]:
+    maxsub   [1000]:
     port     [6090]: 
     threads  [8]: 
 
-Optimal value for _threads_ parameter depends on your hardware performance, usually it should be setted with the amount of avalaible CPUs (or even 2x). Afterwards, the server is ready to accept the client requests:
+The _maxsub_ parameter define the maximum number of jobs that the server can handle, afterwards it should be restarted. The value of this parameter depends on the version of `thread` Perl library installed on your system. Optimal value for _threads_ parameter depends on your hardware performance, usually it should be setted with the amount of avalaible CPUs (or even 2x). Afterwards, the server is ready to accept the client requests:
 
     [2014/04/30 17:37:33] server initialized
     [2014/04/30 17:37:33] server is listening
@@ -190,7 +191,7 @@ You are encouraged to kill Schrodinger jobs from the _jobcontrol_ tool when they
 
 ### 2. 3. Batch submission
 
-The QUEST server does not handle more than a thousand of submitted jobs. With the release 14.5.c a warning message will be sent to the client if the quota has been exceeded:
+The QUEST server does not handle more than a thousand of submitted jobs (such limit an be configured in the _QUEST.conf_ file). With the release 14.5.c a warning message will be sent to the client if the quota has been exceeded:
 
     WARNING: the server has collected 1000 jobs. You should restart the 
     server before submitting another job.
@@ -210,4 +211,3 @@ Moreover, if you plan to use a bot for multiple submission, you must keep in min
     }
     
     exit;
-
