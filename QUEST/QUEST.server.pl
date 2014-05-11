@@ -35,6 +35,7 @@ our %confs = (
     'host'       => '127.0.0.1',        # IP address del localhost
     'port'       => '6090',             # porta
     'threads'    => '8',                # numero massimo di threads concorrenti
+    'maxsub'     => '1000',             # numero massimo di submission che il server puo' sopportare
 );
 
 our $socket; # l'oggetto per gestire la comunicazione client/server
@@ -52,7 +53,6 @@ our %killerlist;
 our @children;
 our (@queued, @running, @sorted) :shared; # lista dei job accodati e running
 
-our $maxsubmission = 1000; # ho notato che dopo 1020 job sottomessi il server va in bomba (???)
 our $submitted = 0E0;
 
 ## SBLOG ##
@@ -257,9 +257,9 @@ END
             } elsif ($recieved_data =~ /user/ ) {
                 
                 $submitted++;
-                if ($submitted > $maxsubmission) {
+                if ($submitted > $confs{'maxsub'}) {
                     my $mess = <<END
-WARNING: the server has collected $maxsubmission jobs. You should restart the 
+WARNING: the server has collected $confs{'maxsub'} jobs. You should restart the 
 server before submitting another job.
 END
                     ;
