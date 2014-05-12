@@ -510,7 +510,7 @@ sub job_monitor {
             } else {
                 my ($jobid, $script) = $newline =~ /(\w{8})  <(.+)>/;
                 my $string = "QUEST.job.$jobid.log";
-                my $psaux = qx/ps aux \| grep -P "bash -c $script >> .*$string"/;
+                my $psaux = qx/ps aux \| grep -P " $script >> .*$string"/;
                 my @procs = split("\n", $psaux);
                 my ($match) = grep(!/grep/, @procs);
                 if ($match) {
