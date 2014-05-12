@@ -244,6 +244,19 @@ END
                             }
                         }
                         $job->kill('TERM');
+                        
+                        # verifico se il job è stato ucciso
+                        sleep 2;
+                        if ($job->is_running) {
+                            sleep 2;
+                        }
+                        
+                        if ($job->is_running) {
+                            $mess = "E- unable to kill job [$jobid]";
+                        } else {
+                            $mess = "job [$jobid] killed";
+                        }
+                        
                     } else {
                         $mess = "job [$jobid] has already accomplished";
                     }
@@ -349,7 +362,6 @@ sub launch_thread {
     my $jobline;
     my $queue_time;
     my $running_time;
-    my $signature = ' ';
     
     $queue_time = time;
     
@@ -393,8 +405,8 @@ sub launch_thread {
         lock @queued; lock @running;
         @queued = grep(!/$jobid/, @queued);
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s> %s", 
-            clock(), $user, $threads, $jobid, $cmd_line, $signature
+            "%s  % 8s  %s  %s  <%s>", 
+            clock(), $user, $threads, $jobid, $cmd_line
         );
         push (@running, $jobline);
     }
@@ -410,6 +422,8 @@ sub launch_thread {
     }
     
     if ($schrodinger eq 'true') { # blocco ad-hoc per i job della Schrodinger
+        
+        my $signature;
         
         # leggo il logfile per catturare il JobID assegnato da Schrodinger
         my $waitforjobid = 1;
@@ -430,8 +444,8 @@ sub launch_thread {
             lock @running;
             @running = grep(!/$jobid/, @running);
             $jobline = sprintf(
-                "%s  % 8s  %s  %s  <%s> [Schrodinger: %s]", 
-                clock(), $user, $threads, $jobid, $cmd_line, $signature
+                "%s  % 8s  %s  %s [Schrodinger: %s]  <%s>", 
+                clock(), $user, $threads, $jobid, $signature, $cmd_line
             );
             push (@running, $jobline);
         }
@@ -489,21 +503,20 @@ sub job_monitor {
         # modifico la lista dei running fornendo il PID invece del path dello script lanciato
         for (my $i = 0; $i < scalar @running; $i++) {
             my $newline = $running[$i];
-            if ($newline =~ /<.+>/) {
+            if ($newline =~ /\[Schrodinger:/) {
+                next; # sono job della Schrodinger, non troverei il PID
+            } elsif ($newline =~ /\[PID:/) {
+                next; # sono job gia' flaggati, passo oltre
+            } else {
                 my ($jobid, $script) = $newline =~ /(\w{8})  <(.+)>/;
-                if ($newline =~ /\[Schrodinger:/) {
-                    $newline =~ s/<.+> //;
+                my $string = "QUEST.job.$jobid.log";
+                my $psaux = qx/ps aux \| grep -P "bash -c $script >> .*$string"/;
+                my @procs = split("\n", $psaux);
+                my ($match) = grep(!/grep/, @procs);
+                if ($match) {
+                    my ($pid) = $match =~ /\w+\s*(\d+)/;
+                    $newline =~ s/<.+>/[PID: $pid]  <$script>/;
                     $running[$i] = $newline;
-                } else {
-                    my $string = "QUEST.job.$jobid.log";
-                    my $psaux = qx/ps aux \| grep -P "bash -c $script >> .*$string"/;
-                    my @procs = split("\n", $psaux);
-                    my ($match) = grep(!/grep/, @procs);
-                    if ($match) {
-                        my ($pid) = $match =~ /\w+\s*(\d+)/;
-                        $newline =~ s/<.+>/[PID: $pid]/;
-                        $running[$i] = $newline;
-                    }
                 }
             }
         }
