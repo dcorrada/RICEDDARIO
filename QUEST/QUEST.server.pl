@@ -280,7 +280,7 @@ END
                     $client->send('QUEST.over&out');
                     next;
                 } else {
-                    my $jobcounter = sprintf("\n>>> %05d submissions to restart <<<\n", $maxsubmission - $submitted);
+                    my $mess = sprintf("\n>>> %05d submissions to restart <<<\n", $confs{'maxsub'} - $submitted);
                     $client->send($mess);
                 }
                 
