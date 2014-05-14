@@ -280,7 +280,7 @@ END
                     $client->send('QUEST.over&out');
                     next;
                 } else {
-                    my $mess = sprintf("\n>>> %05d submissions to restart <<<\n", $confs{'maxsub'} - $submitted);
+                    my $mess = sprintf(">>> %05d submissions to restart <<<\n\n", $confs{'maxsub'} - $submitted);
                     $client->send($mess);
                 }
                 
@@ -327,7 +327,7 @@ END
                 $killerlist{$jobid} = $job;
                 
                 printf("%s job [%s] submitted by [%s]\n", clock(), $jobid, $client_order{'user'});
-                my $mess = sprintf("%s job [%s] queued,\n STDOUT/STDERR will be written to <%s>",
+                my $mess = sprintf("%s job [%s] queued,\nSTDOUT/STDERR will be written to <%s>",
                     clock(), $jobid, $logfile);
                 $client->send($mess);
                 
