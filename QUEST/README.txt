@@ -10,11 +10,12 @@ At first time you will be asked to edit the configuration file:
 
 Just press `ENTER` for keeping the default values:
 
-    host     [127.0.0.1]: 
+    host     [127.0.0.1]:
+    maxsub   [1000]:
     port     [6090]: 
     threads  [8]: 
 
-Optimal value for _threads_ parameter depends on your hardware performance, usually it should be setted with the amount of avalaible CPUs (or even 2x). Afterwards, the server is ready to accept the client requests:
+The _maxsub_ parameter define the maximum number of jobs that the server can handle (once you have submitted _maxsub_ jobs, the server should be restarted). The value of this parameter depends on how Perl has been compiled on your system. Optimal value for _threads_ parameter depends on your hardware performance, usually it should be setted with the amount of avalaible CPUs (or even 2x). Afterwards, the server is ready to accept the client requests:
 
     [2014/04/30 17:37:33] server initialized
     [2014/04/30 17:37:33] server is listening
@@ -26,9 +27,11 @@ Server can be stopped by press `CTRL+C`:
 **WARNING:** it may happen that in the meanwhile some job is still running, in this case the server warns you about orphans:
 
     W- job [WH6OHKBF] was running while KILL signal arrived, check for accidental 
-    orphans generated from </home/dario/tmp/demo/parent.sh>
+    orphans generated from 10252
 
     [2014/04/30 17:58:51] QUEST server stopped
+
+The number refers to the PID of the parent process that it could be still alive.
 
 ### 1. 1. Launch the server as a daemon
 
@@ -59,11 +62,13 @@ The client script should be launched as local user. In order to reproduce the su
 This folder contains three shell scripts. The file _ps.monitor.sh_ is a simple monitor for showing the processes which run during this sample session. The file _parent.sh_ is the script that we will submit, it launches in background another script (_child.sh_). To submit a job just simply type:
 
     $ QUEST.client.pl parent.sh
-
+    
+    >>> 00999 submissions to restart <<<
+    
     [2014/04/30 18:38:31] job [3HRIT36O] queued,
     STDOUT/STDERR will be written to </home/dario/tmp/demo/QUEST.job.3HRIT36O.log>
 
-As well the server returns to the client a message specifying the job identifier (jobID) and a log file that will be created to capture all the stuff coming from the script. When the job is terminated the log file will contains something like the following:
+The header string `>>> 00999 submissions to restart <<<` indicates how many jobs remain to be submitted before the server shoul be restarted. As well the server returns to the client a message specifying the job identifier (jobID) and a log file that will be created to capture all the stuff coming from the script. When the job is terminated the log file will contains something like the following:
 
     singing a lullaby for my child
     child goes to sleep...
@@ -77,7 +82,7 @@ As well the server returns to the client a message specifying the job identifier
     QUEUED TIME....: 00:00:00
     RUNNING TIME...: 00:16:40
 
-The trailing lines below _*** QUEST SUMMARY ***_ show the summaries about your submitted job. 
+The trailing lines below `*** QUEST SUMMARY ***` show the summaries about your submitted job. 
 
 By default the client assign one thread per script. If you forecast to use more than a single thread you can specify it using the `-n` option:
 
@@ -106,17 +111,16 @@ to check the jobs list and their respective status:
     Avalaible threads 0 of 4
 
     --- JOB RUNNING ---
-    [2014/04/30 21:53:26]     dario  4  7578G9E6  </home/dario/tmp/demo/parent.sh>
+    [2014/04/30 21:53:26]     dario  4  7578G9E6  [PID: 10252]  </home/dario/tmp/demo/parent.sh>
 
     --- JOB QUEUED ---
     [2014/04/30 21:53:31]     dario  2  KFB3FM99  </home/dario/tmp/demo/parent.sh>
     [2014/04/30 21:53:37]     dario  3  21WM0G8G  </home/dario/tmp/demo/parent.sh>
 
-From the jobs list we can also view the list of jobIDs, so you can kill your running/queued jobs every time:
+When jobs are running the PID of the main process i returned. From the jobs list we can also view the list of jobIDs, so you can kill your running/queued jobs every time:
 
     $ QUEST.client.pl -k
 
-    server is killing.....
     job [KFB3FM99] has been killed
 
 
@@ -160,22 +164,21 @@ Finally, the option `-s` must be spcified during the job submission:
 
     $ QUEST.client.pl -s erwin.sh
 
-If you take a look to the joblist you will see that these job are flagged by an additional note while running:
+If you take a look to the joblist you will something like this:
 
     $ QUEST.client.pl -l
     
     Avalaible threads 0 of 4
     
     --- JOB RUNNING ---
-    [2014/05/07 15:21:53]     dario  2  76PJL237  </home/dario/tmp/schro/parent.sh> null
-    [2014/05/07 15:22:19]     dario  1  UE2YWZ2J  </home/dario/tmp/schro/erwin.sh> [Schrodinger lbpc7-0-536a338b]
+    [2014/05/07 15:21:53]     dario  2  76PJL237  [PID: 11382]  </home/dario/tmp/schro/parent.sh> null
+    [2014/05/07 15:22:19]     dario  1  UE2YWZ2J  [Schrodinger lbpc7-0-536a338b]  </home/dario/tmp/schro/erwin.sh>
     
     --- JOB QUEUED ---
     [2014/05/07 15:22:03]     dario  3  R9B7KW99  </home/dario/tmp/schro/child.sh>
     [2014/05/07 15:22:28]     dario  4  LVSTVZL2  </home/dario/tmp/schro/erwin2.sh>
     
-Such notes are the JobIDs (e.g. _lbpc7-0-536a338b_) assigned by the Schrodinger job manager. When you try to kill one of these jobs you will receive a warning like this:
-
+For Schrodinger running jobs the PID flag is substituted by `[Schrodinger lbpc7-0-536a338b]`, where the JobId of the internal Schrodinger job manager is returned. When you try to kill one of these jobs you will receive a warning like this:
 
     $ QUEST.client.pl -k UE2YWZ2J
     
@@ -190,7 +193,7 @@ You are encouraged to kill Schrodinger jobs from the _jobcontrol_ tool when they
 
 ### 2. 3. Batch submission
 
-The QUEST server does not handle more than a thousand of submitted jobs. With the release 14.5.c a warning message will be sent to the client if the quota has been exceeded:
+The QUEST server does not handle more than a thousand of submitted jobs (such limit an be configured in the _QUEST.conf_ file). With the release 14.5.c a warning message will be sent to the client if the quota has been exceeded:
 
     WARNING: the server has collected 1000 jobs. You should restart the 
     server before submitting another job.
@@ -210,4 +213,3 @@ Moreover, if you plan to use a bot for multiple submission, you must keep in min
     }
     
     exit;
-
