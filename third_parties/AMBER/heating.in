@@ -1,0 +1,51 @@
+# WARNING: this is a template of a sander script, please copy the following text WITHOUT comments. 
+
+# /usr/bin/mpirun -np 4 $AMBERHOME/bin/pmemd.MPI -O -i eq.nvt.sander -p solv.rec.prmtop -c min.rec.rst7 -r eq.nvt.rec.rst7 -o eq.nvt.rec.mdout -x eq.nvt.rec.mdcrd -e eq.nvt.rec.mden
+
+# the first line is the header (title) of the script
+Heating up the system in NVT ensemble (10 ps)
+
+# the variables must be grouped by a namelist identifier, a record whose first 
+# seven characters after a " &" (e.g. " &cntrl ") name a group of variables. 
+# Variables that are not given in the namelist input retain their default values. 
+&cntrl
+
+# Note that the first character on each line of a namelist block must be a blank.
+ imin = 0,              # flag to enable MD run
+ irest= 0,              # no restart
+ 
+# OUTPUTS: at what frequency (steps) outputs will be written (0, disabled)
+ ntpr = 500,            # summaries at mdout file
+ ntwx = 500,            # coordinates
+ ntwe = 500,            # energies
+ ioutfm = 0,            # trajectory files format(0, ASCII formatted; 1, NetCDF binary)
+
+# MD calculations
+ nstlim = 5000,         # number of steps to be performed
+ dt = 0.002,            # time step, in ps
+ nscm = 1000,           # removal of translational and rotational center-of-mass (every ncm steps)
+
+# Temperature regulation
+ ig = 71277,           # random seed
+ temp0 = 300.0,        # reference temperature, in K
+ tempi = 100.0,        # initial temperature, in K
+ ntt = 3,              # Langevin dynamics
+ gamma_ln = 2.0,
+ vlimit = 20.0,
+
+# Pressure regulation
+ ntp = 0,             # no pressure scaling
+
+# SHAKE algorithm
+ ntc = 2,             # bonds involving H are costrained
+
+# Potential function
+ ntb = 1,             # periodic boudaries conditions in NVT ensemble
+ ntf = 2,             # evaluate bond interaction except those involving H-atoms
+ cut = 8.0,           # nonbonded cutoff, in Angstroms
+ nsnb = 25,           # frequency of nonbonded list updates
+ ipol = 0,            # no polarizable force field is applied
+ igb = 0              # no implicit solvent model is applied
+
+# namelist is concluded by an "&end" token.
+&end
