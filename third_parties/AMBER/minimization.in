@@ -1,0 +1,24 @@
+# WARNING: this is a template of a sander script, please copy the following text WITHOUT comments. 
+
+# /usr/bin/mpirun -np 4 $AMBERHOME/bin/pmemd.MPI -O -i min.rec.sander -p solv.rec.prmtop -c solv.rec.inpcrd -ref solv.rec.inpcrd -r min.rec.rst7 -o min.rec.mdout
+
+# the first line is the header (title) of the script
+Minimisation: backbone and ligand w/ position restraints (500 kcal/molA)
+
+# the variables must be grouped by a namelist identifier, a record whose first 
+# seven characters after a " &" (e.g. " &cntrl ") name a group of variables. 
+# Variables that are not given in the namelist input retain their default values. 
+&cntrl
+
+# Note that the first character on each line of a namelist block must be a blank.
+ imin = 1,                                      # flag to perform an energy minimization
+ maxcyc = 2000,                                 # maximum number of steps
+ ncyc = 500,                                    # step at which steepest descent will be switched to conjugate gradient
+ ntb = 1,                                       # periodic boudaries conditions in NVT ensemble
+ ntr = 1,                                       # flag to enable restraints
+ restraint_wt = 500.0,                          # restraint energy in kcal/molA
+ restraintmask = '\@N,CA,C,O,CB | :LIG',        # restraint mask, "LIG" should be replaced by the ligand residue name
+ cut = 8.0                                      # nonbonded cutoff, in Angstroms
+
+# namelist is concluded by an "&end" token.
+&end
