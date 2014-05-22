@@ -13,8 +13,6 @@ Every new contributor has to register him/her credentials:
 
 The last stable release of **RICEDDARIO** is mantained on the branch `master`. The developers version is mantained on the branch `brandnew`, which will be periodically merged with the branch `master`.
 
-**_Any merge between branches_ `master` _and_ `brandnew` _will be flagged by a new release tag._**
-
 Other remote branches are already available for the developement of individual parts of **RICEDDARIO**:
 
     $ git branch -r
@@ -50,3 +48,8 @@ The `RELEASE.NOTES.txt` file will contain a general list of changes made, the fi
     $ rm date.txt
     $ rm TREEnew.txt
 
+### 2. TAGS AND STABLE RELEASES
+
+Any merge between branches `master` and `brandnew` will be flagged by a new release tag.
+
+Occasionally, relevant commits may be directly merged with the `master` branch. Anyway, such decision is restricted to the administrator [dario.corrada@gmail.com](dario.corrada@gmail.com).
