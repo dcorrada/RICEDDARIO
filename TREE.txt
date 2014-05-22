@@ -1,5 +1,4 @@
-ven  9 mag 2014, 09.40.02, CEST
-
+gio 22 mag 2014, 10.06.53, CEST
 ./
 ├── BRENDA/
 │   ├── bin/
@@ -12,6 +11,8 @@ ven  9 mag 2014, 09.40.02, CEST
 │   │   ├── Generic_class.pm*
 │   │   └── Rambo.pm*
 │   └── README.txt
+├── CONTRIBUTORS.txt
+├── date.txt
 ├── EMMA/
 │   ├── demo/
 │   │   ├── inputs/
@@ -77,9 +78,12 @@ ven  9 mag 2014, 09.40.02, CEST
 │   ├── Generic_class.pm*
 │   ├── Kabat.pm*
 │   ├── MatrixDiff.pm*
-│   ├── Parse_Array.pm
+│   ├── Parse_Array.pm*
 │   └── PBS_manager/
 │       └── Scheduler.pm*
+├── LICENSES/
+│   ├── CC_v3.pdf
+│   └── GPL_V2.txt
 ├── MyMir/
 │   ├── data/
 │   │   ├── MyMir.CrossLinks.rda
@@ -133,7 +137,11 @@ ven  9 mag 2014, 09.40.02, CEST
 │       └── zzz.R
 ├── QUEST/
 │   ├── demo/
+│   │   ├── amae.maegz
+│   │   ├── batch.normals.pl*
+│   │   ├── batch.schrodingers.pl*
 │   │   ├── child.sh*
+│   │   ├── genmaes.pl*
 │   │   ├── parent.sh*
 │   │   └── ps.monitor.sh*
 │   ├── QUEST.client.pl*
@@ -142,6 +150,7 @@ ven  9 mag 2014, 09.40.02, CEST
 │   ├── README.txt
 │   └── RELEASE.NOTES.txt
 ├── README.txt
+├── RELEASE.NOTES.txt
 ├── sequence/
 │   ├── aln2fasta.pl*
 │   ├── Global_Align.pl*
@@ -200,8 +209,13 @@ ven  9 mag 2014, 09.40.02, CEST
 │   └── PDB_debugger.pl*
 ├── third_parties/
 │   ├── AMBER/
-│   │   ├── amb2gmx.traj.converter.RUBBEN.sh
-│   │   └── amb2gmx.traj.converter.sh
+│   │   ├── AMB2GMX.pl*
+│   │   ├── equilibration.in*
+│   │   ├── heating.in*
+│   │   ├── miniAMBER.pl*
+│   │   ├── minimization.in*
+│   │   ├── PDB4AMBER.pl*
+│   │   └── production.in*
 │   ├── BOWTIE/
 │   │   ├── bowtie_input_prepare.pl*
 │   │   ├── bowtie_pipeline.pl*
@@ -214,15 +228,15 @@ ven  9 mag 2014, 09.40.02, CEST
 │   │   │   ├── default.crg
 │   │   │   ├── default.siz
 │   │   │   └── delphi.param
-│   │   └── HOWTO.txt
+│   │   └── HOWTO.txt*
 │   ├── GROMACS/
 │   │   ├── allestimento_simulazione.pl*
 │   │   ├── BENDER.pl*
-│   │   ├── covasum.awk
-│   │   ├── diffmat.gnuplot
+│   │   ├── covasum.awk*
+│   │   ├── diffmat.gnuplot*
 │   │   ├── dssp_analyze.pl*
 │   │   ├── edit_ndx.pl*
-│   │   ├── extrcoord.sh
+│   │   ├── extrcoord.sh*
 │   │   ├── GROMACS2AMBER.pl*
 │   │   ├── MDP_files/
 │   │   │   ├── energy.minimization.mdp
@@ -233,21 +247,21 @@ ven  9 mag 2014, 09.40.02, CEST
 │   │   │   ├── gromacs_ilbestia.sh
 │   │   │   └── gromacs_kappuwai.sh
 │   │   ├── rmsdist.diff.pl*
-│   │   ├── rmsdist.gnuplot
-│   │   ├── rmsdist.square.local.c
-│   │   ├── rmsdist.square.local.out
+│   │   ├── rmsdist.gnuplot*
+│   │   ├── rmsdist.square.local.c*
+│   │   ├── rmsdist.square.local.out*
 │   │   ├── STEP1_genbox.pl*
-│   │   ├── STEP2_minimizzazione.sh
-│   │   └── xpm2normal.csh
+│   │   ├── STEP2_minimizzazione.sh*
+│   │   └── xpm2normal.csh*
 │   ├── MAQ/
 │   │   ├── maq_input_prepare.pl*
-│   │   ├── maq_pipeline.pl
+│   │   ├── maq_pipeline.pl*
 │   │   └── maq_scheduler.pl*
 │   ├── MODELLER/
-│   │   ├── allineamento.ligando.ali
-│   │   ├── allineamento.multicatena.ali
+│   │   ├── allineamento.ligando.ali*
+│   │   ├── allineamento.multicatena.ali*
 │   │   ├── dope.evaluation.py*
-│   │   ├── DOPEgraph.gnuplot
+│   │   ├── DOPEgraph.gnuplot*
 │   │   ├── MODELLER.raw.py*
 │   │   ├── MODELLER.refine.py*
 │   │   ├── model_parallelized/
@@ -265,11 +279,12 @@ ven  9 mag 2014, 09.40.02, CEST
 │   ├── PyMol/
 │   │   └── HYDROPHOBIC_PATCHES.py*
 │   └── VMD/
-│       ├── macro.tcl
-│       ├── pbcbox.tcl
-│       ├── pbctools.tcl
-│       ├── sscache.tcl
-│       └── sstruct.tcl
+│       ├── macro.tcl*
+│       ├── pbcbox.tcl*
+│       ├── pbctools.tcl*
+│       ├── sscache.tcl*
+│       └── sstruct.tcl*
+├── TREEnew.txt
 ├── TREE.txt
 ├── unsorted/
 │   ├── MySQL/
@@ -331,4 +346,4 @@ ven  9 mag 2014, 09.40.02, CEST
     ├── sh_scheduler.pl*
     └── WORKFLOW.MAP.mm
 
-60 directories, 269 files
+61 directories, 284 files

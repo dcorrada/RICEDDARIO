@@ -1,0 +1,52 @@
+## Good Development Practices for Contributors
+
+The versioning of the **RICEDDARIO** is managed by git. For more information please read tips and tricks at [http://git-scm.com/book/](http://git-scm.com/book/).
+
+In order to become a contributor of **RICEDDARIO** you must generate a public/private key pair. Then, create a copy of your public key file renamed as `[contributor_name].pub` and send it to [dario.corrada@gmail.com](dario.corrada@gmail.com).
+
+Every new contributor has to register him/her credentials:
+
+    $ git config --global user.name "John Doe"
+    $ git config --global user.email johndoe@example.com
+
+### 1. BRANCHES
+
+The last stable release of **RICEDDARIO** is mantained on the branch `master`. The developers version is mantained on the branch `brandnew`, which will be periodically merged with the branch `master`.
+
+**_Any merge between branches_ `master` _and_ `brandnew` _will be flagged by a new release tag._**
+
+Other remote branches are already available for the developement of individual parts of **RICEDDARIO**:
+
+    $ git branch -r
+
+You are free of creating new branches as well. Nevertheless, all contributors' branches will be merged with the `brandnew` branch when issues/developements have been accomplished:
+
+    $ git branch issueX
+    $ git checkout issueX
+    
+    [your stuffs]
+    
+    $ git checkout brandnew
+    $ git pull origin brandnew
+    $ git merge issueX
+
+    [updating changelogs on the branch brandnew]
+
+    $ git push origin brandnew
+
+#### 1. 1. Editing Change Logs
+
+The summary changelog of **RICEDDARIO** is mantained by the following file:
+
+* RELEASE.NOTES.txt
+* TREE.txt
+
+The `RELEASE.NOTES.txt` file will contain a general list of changes made, the file `TREE.txt` is a site map of the package **RICEDDARIO**:
+
+    $ cd /home/dario/GITs/RICEDDARIO
+    $ date > date.txt
+    $ tree -F -n ./ > TREEnew.txt
+    $ cat date.txt TREE.txt > TREE.txt
+    $ rm date.txt
+    $ rm TREEnew.txt
+
