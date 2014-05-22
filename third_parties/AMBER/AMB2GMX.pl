@@ -1,5 +1,16 @@
 #!/usr/bin/perl
-# -d
+
+
+# CHANGELOG
+#
+# release 14.5.b                - interactive mode for options confirmation
+# (at RICEDDARIO 14.6)          - paths for GROMACS commands
+#                               - USAGE block removed
+#                               - selecting groups from index file
+#
+# release 14.5.a                - initial release
+# (at RICEDDARIO 14.5)
+
 
 use strict;
 use warnings;
@@ -28,7 +39,11 @@ use threads;
 our $workdir = getcwd();
 our $AMBERHOME = $ENV{'AMBERHOME'};
 our $bins = { # file binari
-    'ptraj'     =>  $AMBERHOME . '/bin/ptraj',
+    'ptraj'     =>  $AMBERHOME . "/bin/ptraj\n",
+    'trjconv'   => qx/which trjconv/,
+    'trjcat'    => qx/which trjcat/,
+    'makendx'   => qx/which make_ndx/,
+    'editconf'   => qx/which editconf/,
 };
 our $inputs = {
     'prmtop'    => 'null',
@@ -42,15 +57,14 @@ our $options = {
     'filename'  => 'null'
 };
 our @thr;
+our $selected;
 ## SBLOG ##
 
-USAGE: {
-    use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'skip=i', 'first=i', 'last=i');
-    my $usage = <<END
+INIT: {
+    my $splash = <<END
 ********************************************************************************
 AMB2GMX
-release 14.5.a
+release 14.5.b
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -69,52 +83,18 @@ installation of AMBER 12 and Gromacs 4.5.5 or later. Earlier versions of these
 packages may work, but have not been explicitly tested.
 
 You must have the following files in the working directory:
-
+  
   1. Your t0 structure file (inpcrd or rst7);
   2. Your trajectory file (mdcrd)
   3. Your topology file (prmtop)
 
-SYNOPSIS
-    
-    \$ AMB2GMX.pl
-
-OPTIONS
-    -skip   <int>       read only every int frame (default 1); this value will
-                        be also used as timestep by trjconv (in ps)
-    
-    -first  <int>       first frame to read (default 1)
-    
-    -last   <int>       last frame to read (default 1000)
-END
-    ;
-    if (exists $options->{'help'}) {
-        print $usage;
-        goto FINE;
-    }
-}
-
-INIT: {
-    my $splash = <<END
-********************************************************************************
-AMB2GMX
-release 14.5.a
-
-Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
-
-Based on Trajectory Converter - v1.5
-Copyright (c) 2008 Justin LEMKUL <jalemkul\@vt.edu>
-
-This program is free software; you can redistribute it and/or modify it under 
-the terms of the GNU General Public License as published by the Free Software 
-Foundation; either version 2 of the License, or (at your option) any later 
-version.
-********************************************************************************
 END
     ;
     print $splash;
     
     # verifico che i binari ci siano tutti
     foreach my $key (keys %{$bins}) {
+        chomp $bins->{$key};
         if (-e $bins->{$key}) {
             next;
         } else {
@@ -143,22 +123,32 @@ END
     
     # chiedo conferma che tutti i parametri siano ok
     my $ans;
-    print"\n[ inputs ]\n";
+    
+    printf("First frame to sample [%s]: ", $options->{'first'});
+    $ans = <STDIN>; chomp $ans;
+    $options->{'first'} = $ans if ($ans && !($options->{'first'} eq $ans));
+    
+    printf("Last frame to sample [%s]: ", $options->{'last'});
+    $ans = <STDIN>; chomp $ans;
+    $options->{'last'} = $ans if ($ans && !($options->{'last'} eq $ans));
+    
+    printf("Skip every i-th frames [%s]: ", $options->{'skip'});
+    $ans = <STDIN>; chomp $ans;
+    $options->{'skip'} = $ans if ($ans && !($options->{'skip'} eq $ans));
+    
+    printf("Outputs base name [%s]: ", $options->{'filename'});
+    $ans = <STDIN>; chomp $ans;
+    $options->{'filename'} = $ans if ($ans && !($options->{'filename'} eq $ans));
+    
     foreach my $key (keys %{$inputs}) {
-        printf("% 12s => %s\n", $key, $inputs->{$key});
+        printf("\n  %s => %s", $key, $inputs->{$key});
     }
-    print"\n[ parameters ]\n";
-    foreach my $key (keys %{$options}) {
-        printf("% 12s => %s\n", $key, $options->{$key});
-    }
-    print "\nIs it alright? [Y/n] ";
+    print "\n\nInput files are alright? [Y/n] ";
     $ans = <STDIN>;
     chomp $ans;
     $ans = 'y' unless ($ans);
-    if ($ans =~ /[Yy]/) {
-        print "\n>>> HEY HO LET'S GO <<<\n\n";
-    } else {
-        print "\ntype \"AMB2GMX.pl -h\" to see the avalaible options\n";
+    unless ($ans =~ /[Yy]/) {
+        print "\naborting";
         goto FINE;
     } 
 }
@@ -204,39 +194,38 @@ RENAME: {
     }
 }
 
-#
-# Questo blocco serve per crearsi un index file custom ed estrarre la 
-# traiettoria usando quello come filtro. Occorre però modificare anche il 
-# codice a valle per renderlo effettivo.
-# 
-# NDX: {
-#     # cerco i gruppi per proteina (e ligando)
-#     printf("\n*** %s creating index file ***\n\n", clock());
-#     my @log = qx/echo "q" | make_ndx -f mdcrd_0.pdb 2>&1/;
-#     my @groups;
-#     while (my $newline = shift @log) {
-#         chomp $newline;
-#         if ($newline =~ /:\s+\d+ atoms$/) {
-#             if ($newline =~ /( Protein | Other )/) {
-#                 next;
-# #                 print "retain group [$newline]\n";
-#             } else {
-#                 my ($num) = $newline =~ /^\s+(\d+)/;
-#                 push(@groups, $num);
-#             }
-#         }
-#     }
-#     unlink "index.ndx";
-#     
-#     my $cmd = 'make_ndx -f mdcrd_0.pdb <<EOF';
-#     while (my $i = pop @groups) {
-#         $cmd .= "\ndel $i";
-#     }
-#     $cmd .= "\nq\nEOF";
-#     print "[$cmd]";
-#     system("$cmd");
-# }
-#
+NDX: {
+    # cerco i gruppi per proteina (e ligando)
+    printf("\n*** %s creating index file ***\n\n", clock());
+    my @log = qx/echo "q" | $bins->{'makendx'} -f mdcrd_0.pdb 2>&1/;
+    while (my $newline = shift @log) {
+        chomp $newline;
+        if ($newline =~ /:\s+\d+ atoms$/) {
+            print "$newline\n";
+        }
+    }
+    
+    my @groups = ( '1' );
+    print "\nWhich of these groups you would retain? [@groups] ";
+    my $ans = <STDIN>; chomp $ans;
+    @groups = split(" ", $ans) if ($ans);
+    my $joined = join(' | ', @groups);
+    
+    my $cmd = "$bins->{'makendx'} -f mdcrd_0.pdb <<EOF";
+    $cmd .= "\n$joined\nq\nEOF";
+    system("$cmd");
+    
+    undef @groups;
+    my @log = qx/echo "q" | $bins->{'makendx'} -f mdcrd_0.pdb -n index.ndx 2>&1/;
+    while (my $newline = shift @log) {
+        chomp $newline;
+        if ($newline =~ /:\s+\d+ atoms$/) {
+            push(@groups, $newline);
+        }
+    }
+    my $newgroup = pop @groups;
+    ($selected) = $newgroup =~ /^\s*(\d+)/;
+}
 
 TRJCONV: {
     printf("\n*** %s running trjconv ***\n\n", clock());
@@ -264,9 +253,9 @@ TRJCONV: {
 
 TRJCAT: {
     printf("\n*** %s concatenating snapshots ***\n\n", clock());
-    system("trjcat -f traj_?????.xtc -o $options->{'filename'}.start.xtc");
-    system("echo 0 | editconf -f mdcrd_0.pdb -o $options->{'filename'}.gro");
-    system("echo 0 | trjconv -f $options->{'filename'}.start.xtc -s $options->{'filename'}.gro -timestep $options->{'skip'} -o $options->{'filename'}.xtc");
+    system("$bins->{'trjcat'} -f traj_?????.xtc -o $options->{'filename'}.start.xtc");
+    system("echo $selected | $bins->{'editconf'} -f mdcrd_0.pdb -o $options->{'filename'}.gro -n index.ndx");
+    system("echo $selected | $bins->{'trjconv'} -f $options->{'filename'}.start.xtc -s $options->{'filename'}.gro -timestep $options->{'skip'} -o $options->{'filename'}.xtc -n index.ndx");
 }
 
 CLEANSWEEP: {
@@ -276,6 +265,8 @@ rm *.pdb
 rm traj_?????.xtc
 rm *.start.xtc
 rm ptraj_*.in
+rm index.ndx
+rm \\#*
 END
     ;
     qx/$cmd/;
@@ -301,6 +292,6 @@ sub clock {
 sub pdb2xtc {
     my ($filename) = @_;
     my ($num) = $filename =~ /^mdcrd\.(\d+)\.pdb$/;
-    my $cmdline = sprintf("echo 0 | trjconv -s %s -f %s -o traj_%05i.xtc -t0 %i", $filename, $filename, $num, $num);
+    my $cmdline = sprintf("echo 0 | $bins->{'trjconv'} -s %s -f %s -o traj_%05i.xtc -t0 %i", $filename, $filename, $num, $num);
     qx/$cmdline 2>&1/;
 }
