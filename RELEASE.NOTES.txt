@@ -1,0 +1,7 @@
+This is a summary of the major changes made to the package, see also the related 
+release note of the individual scripts for further details.
+
+*** release 14.5.a ***
+
+- added LICENSES folder
+- updated INSTALL.pl file
