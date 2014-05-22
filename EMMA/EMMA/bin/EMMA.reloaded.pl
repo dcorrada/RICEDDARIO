@@ -139,7 +139,7 @@ INPUT FILES
     ----------------------------------------------------------------------------
      FILENAME                DESCRIPTION
     ----------------------------------------------------------------------------
-     topol.tpr               the topology file
+     topol[.tpr|.gro]        the topology file
     
      traj.xtc                trajectory file
     
@@ -269,6 +269,11 @@ INIT: {
         'cluster_log'   => $basepath . '/cluster.log',
         'xpm_file'      => $basepath . '/rmsd.xpm', # ATTENZIONE: non si tratta del file xpm in output a "g_cluster" ma di quello prodotto da "g_rms" con l'opzione "-m"
     );
+    
+    if (-e $basepath . '/topol.gro') {
+        $params{'tpr_file'} = $basepath . '/topol.gro';
+    }
+    
     $par_file = $workdir . '/params.txt';
     $file_obj->set_filename($par_file);
     $content = [ ];
