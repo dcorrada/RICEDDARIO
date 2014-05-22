@@ -8,7 +8,8 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release 14.6 ***
-- 
+- AMB2GMX: new release
+- EMMA: read gro files
 
 *** release 14.5 ***
 
