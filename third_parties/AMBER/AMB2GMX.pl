@@ -109,15 +109,12 @@ END
     ($inputs->{'prmtop'}) = grep { /\.prmtop$/ } @content;
     ($inputs->{'inpcrd'}) = grep { /\.(inpcrd|rst7)$/ } @content;
     ($inputs->{'mdcrd'}) = grep { /\.mdcrd$/ } @content;
-    unless ($inputs->{'mdcrd'} eq 'null') {
-        ($options->{'filename'}) = $inputs->{'mdcrd'} =~ /(.+)\.mdcrd$/;
-    }
     
     foreach my $key (keys %{$inputs}) {
-        if ($inputs->{$key} eq 'null') {
-            croak "\nE- file <$inputs->{$key}> not found\n\t";
-        } else {
+        if ($inputs->{$key}) {
             next;
+        } else {
+            croak "\nE- input file <$key> not found\n\t";
         }
     }
     
@@ -136,6 +133,7 @@ END
     $ans = <STDIN>; chomp $ans;
     $options->{'skip'} = $ans if ($ans && !($options->{'skip'} eq $ans));
     
+    ($options->{'filename'}) = $inputs->{'mdcrd'} =~ /(.+)\.mdcrd$/;
     printf("Outputs base name [%s]: ", $options->{'filename'});
     $ans = <STDIN>; chomp $ans;
     $options->{'filename'} = $ans if ($ans && !($options->{'filename'} eq $ans));
@@ -216,7 +214,7 @@ NDX: {
     system("$cmd");
     
     undef @groups;
-    my @log = qx/echo "q" | $bins->{'makendx'} -f mdcrd_0.pdb -n index.ndx 2>&1/;
+    @log = qx/echo "q" | $bins->{'makendx'} -f mdcrd_0.pdb -n index.ndx 2>&1/;
     while (my $newline = shift @log) {
         chomp $newline;
         if ($newline =~ /:\s+\d+ atoms$/) {
