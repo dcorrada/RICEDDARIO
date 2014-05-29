@@ -1,3 +1,11 @@
+*** release 14.5.d ***
+
+* JOB LIST: added queue types (fast|slow) to job priority
+
+* CLIENT OPTIONS: added new option '-q' to the client script
+
+* INTERNALS: improving killing queued jobs
+
 *** release 14.5.c ***
 
 * LOG MESSAGES: in the joblist the PID of the main processes launched is showed (for running jobs only).
