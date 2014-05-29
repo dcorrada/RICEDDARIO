@@ -1,6 +1,17 @@
 This is a summary of the major changes made to the package, see also the related 
 release note of the individual scripts for further details.
 
+REMEMBER to read...
+
+<https://github.com/dcorrada/RICEDDARIO/wiki/CONTRIBUTORS#1-1-editing-change-logs>
+
+...before merging to 'master' branch
+
+*** release 14.6 ***
+- AMB2GMX: new release (14.5.b)
+- EMMA: read gro files
+- QUEST: new release (14.5.d)
+
 *** release 14.5 ***
 
 - added <LICENSES> folder

@@ -35,7 +35,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.c
+release 14.5.d
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -50,7 +50,7 @@ END
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s', 'schrodinger|s');
+    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s', 'schrodinger|s', 'queue|q=s' );
     my $usage = <<END
 SYNOPSYS
 
@@ -63,14 +63,18 @@ SYNOPSYS
 
 OPTIONS
 
-  -n <int>      suggested number of threads used (default: 1)
+  -n <int>              suggested number of threads used (default: 1)
 
-  -l            list of jobs running/queued
+  -l                    list of jobs running/queued
 
-  -k <jobid>    kill a job
-  
-  -s            specify that the job comes from Schrondinger Suite, please read 
-                the README.txt file in order to write a correct script file
+  -k <jobid>            kill a job
+
+  -s                    specify that the job comes from Schrondinger Suite, 
+                        please read the README.txt file in order to write a 
+                        correct script file
+
+  -q <fast|slow>        specify the queue type, "fast" jobs have priority over 
+                        "slow" jobs(default: slow)
 
 END
     ;
@@ -117,6 +121,11 @@ INIT: {
             $options->{'schrodinger'} = 'true';
         } else {
             $options->{'schrodinger'} = 'false';
+        }
+        if (exists $options->{'queue'}) {
+            $options->{'queue'} = 'slow' unless ($options->{'queue'} =~ /(fast|slow)/);
+        } else {
+            $options->{'queue'} = 'slow';
         }
     } elsif (exists $options->{'killer'}) {
         $options->{'user'} = $ENV{'USER'};

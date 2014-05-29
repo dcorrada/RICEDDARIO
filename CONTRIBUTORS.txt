@@ -44,7 +44,7 @@ The `RELEASE.NOTES.txt` file will contain a general list of changes made, the fi
     $ cd /home/dario/GITs/RICEDDARIO
     $ date > date.txt
     $ tree -F -n ./ > TREEnew.txt
-    $ cat date.txt TREE.txt > TREE.txt
+    $ cat date.txt TREEnew.txt > TREE.txt
     $ rm date.txt
     $ rm TREEnew.txt
 
