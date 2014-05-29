@@ -61,7 +61,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.c
+release 14.5.d
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -246,13 +246,10 @@ END
                         $job->kill('TERM');
                         
                         # verifico se il job è stato ucciso
-                        sleep 2;
-                        if ($job->is_running) {
-                            sleep 2;
-                        }
+                        sleep 4.6;
                         
                         if ($job->is_running) {
-                            $mess = "E- unable to kill job [$jobid]";
+                            $mess = "W- job [$jobid] is still alive, try to check it later";
                         } else {
                             $mess = "job [$jobid] killed";
                         }
@@ -319,7 +316,8 @@ END
                     $client_order{'user'},
                     $jobid,
                     $client_order{'workdir'},
-                    $client_order{'schrodinger'}
+                    $client_order{'schrodinger'},
+                    $client_order{'queue'}
                 );
                 # $job->detach();
                 
@@ -348,7 +346,7 @@ FINE: {
 }
 
 sub launch_thread {
-    my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir, $schrodinger) = @_;
+    my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir, $schrodinger, $queue_type) = @_;
     
     # Thread 'cancellation' signal handler
     $SIG{'TERM'} = sub {
@@ -371,13 +369,13 @@ sub launch_thread {
     { # metto il job nella lista dei queued
         lock @queued; lock @sorted;
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>",
-            clock(), $user, $threads, $jobid, $cmd_line
+            "%s  % 8s  %s  %s  %s  <%s>",
+            clock(), $user, $threads, $queue_type, $jobid, $cmd_line
         );
         push (@queued, $jobline);
         
         # metto il job nella scaletta dei job che dovranno partire
-        my $position = sprintf("%04d%012d-%s", $threads, time, $jobid);
+        my $position = sprintf("%s%04d%012d-%s", $threads, $queue_type, time, $jobid);
         push(@sorted,$position);
         @sorted = sort {$a cmp $b} @sorted;
     }
@@ -386,13 +384,10 @@ sub launch_thread {
     my $waitasecond = 1;
     while ($waitasecond) { 
         if (${$semaforo} >= $threads) {
-            {
-                lock @sorted;
-                my $ontop = $sorted[0];
-                if ($ontop =~ /$jobid/) {
-                    shift @sorted;
-                    undef $waitasecond;
-                }
+            my $ontop = $sorted[0];
+            if ($ontop =~ /$jobid/) {
+                { lock @sorted; shift @sorted; }
+                undef $waitasecond;
             }
         }
         sleep 1;
@@ -408,8 +403,8 @@ sub launch_thread {
         lock @queued; lock @running;
         @queued = grep(!/$jobid/, @queued);
         $jobline = sprintf(
-            "%s  % 8s  %s  %s  <%s>", 
-            clock(), $user, $threads, $jobid, $cmd_line
+            "%s  % 8s  %s  %s  %s  <%s>", 
+            clock(), $user, $threads, $queue_type, $jobid, $cmd_line
         );
         push (@running, $jobline);
     }
@@ -447,8 +442,8 @@ sub launch_thread {
             lock @running;
             @running = grep(!/$jobid/, @running);
             $jobline = sprintf(
-                "%s  % 8s  %s  %s [Schrodinger: %s]  <%s>", 
-                clock(), $user, $threads, $jobid, $signature, $cmd_line
+                "%s  % 8s  %s  %s  %s [Schrodinger: %s]  <%s>", 
+                clock(), $user, $threads, $queue_type, $jobid, $signature, $cmd_line
             );
             push (@running, $jobline);
         }

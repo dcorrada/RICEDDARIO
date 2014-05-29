@@ -103,19 +103,18 @@ Now shall we try to submit more than one job. For the sake of simplicity, in thi
     [...]
     $ QUEST.client.pl -n 3 parent.sh
 
-Unlike the previous example, each of the three jobs herein submitted does not exceed the amount of avalaible threads. However, the sum of the required threads (9) exceeds it. Therefore, some of these job will automatically queued until running jobs release a sufficient number of threads. The option `-l` allows you 
-to check the jobs list and their respective status:
+Unlike the previous example, each of the three jobs herein submitted does not exceed the amount of avalaible threads. However, the sum of the required threads (9) exceeds it. Therefore, some of these job will automatically queued until running jobs release a sufficient number of threads. The option `-l` allows you to check the jobs list and their respective status:
 
     $ QUEST.client.pl -l
 
     Avalaible threads 0 of 4
 
     --- JOB RUNNING ---
-    [2014/04/30 21:53:26]     dario  4  7578G9E6  [PID: 10252]  </home/dario/tmp/demo/parent.sh>
+    [2014/04/30 21:53:26]     dario  4  slow  7578G9E6  [PID: 10252]  </home/dario/tmp/demo/parent.sh>
 
     --- JOB QUEUED ---
-    [2014/04/30 21:53:31]     dario  2  KFB3FM99  </home/dario/tmp/demo/parent.sh>
-    [2014/04/30 21:53:37]     dario  3  21WM0G8G  </home/dario/tmp/demo/parent.sh>
+    [2014/04/30 21:53:31]     dario  2  slow  KFB3FM99  </home/dario/tmp/demo/parent.sh>
+    [2014/04/30 21:53:37]     dario  3  slow  21WM0G8G  </home/dario/tmp/demo/parent.sh>
 
 When jobs are running the PID of the main process i returned. From the jobs list we can also view the list of jobIDs, so you can kill your running/queued jobs every time:
 
@@ -171,12 +170,12 @@ If you take a look to the joblist you will something like this:
     Avalaible threads 0 of 4
     
     --- JOB RUNNING ---
-    [2014/05/07 15:21:53]     dario  2  76PJL237  [PID: 11382]  </home/dario/tmp/schro/parent.sh> null
-    [2014/05/07 15:22:19]     dario  1  UE2YWZ2J  [Schrodinger lbpc7-0-536a338b]  </home/dario/tmp/schro/erwin.sh>
+    [2014/05/07 15:21:53]     dario  2  slow  76PJL237  [PID: 11382]  </home/dario/tmp/schro/parent.sh> null
+    [2014/05/07 15:22:19]     dario  1  slow  UE2YWZ2J  [Schrodinger lbpc7-0-536a338b]  </home/dario/tmp/schro/erwin.sh>
     
     --- JOB QUEUED ---
-    [2014/05/07 15:22:03]     dario  3  R9B7KW99  </home/dario/tmp/schro/child.sh>
-    [2014/05/07 15:22:28]     dario  4  LVSTVZL2  </home/dario/tmp/schro/erwin2.sh>
+    [2014/05/07 15:22:03]     dario  3  slow  R9B7KW99  </home/dario/tmp/schro/child.sh>
+    [2014/05/07 15:22:28]     dario  4  slow  LVSTVZL2  </home/dario/tmp/schro/erwin2.sh>
     
 For Schrodinger running jobs the PID flag is substituted by `[Schrodinger lbpc7-0-536a338b]`, where the JobId of the internal Schrodinger job manager is returned. When you try to kill one of these jobs you will receive a warning like this:
 
@@ -213,3 +212,15 @@ Moreover, if you plan to use a bot for multiple submission, you must keep in min
     }
     
     exit;
+
+## 3. QUEUE AND PRIORITY OF THE JOBS
+
+The order by which a job exits the queue list and starts is defined at three hierarchical levels:
+
+1. the jobs that require a lesser number of threads are privileged;
+
+2. the jobs that are queued as _fast_ have priority over the ones tagged as _slow_;
+
+3. the job that are queued for longer time are privileged.
+
+The queue type (_fast_ or _slow_) is handled by the option `-q`
