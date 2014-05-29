@@ -279,7 +279,7 @@ MAIL: {
 #     print Dumper $folders;
     $imap->select("INBOX") or croak(sprintf("\nE- %s\n\t", $imap->LastError)); # seleziona la posta in arrivo
     $imap->Uid(1);
-    my @msg = $imap->messages or croak("\nE- unable to retrieve messages\n\t");;
+    my @msg = $imap->messages or croak("\nE- unable to retrieve messages\n\t");
     my $jobcount = 0E0;
     foreach my $message (@msg) {
         my $subj = $imap->subject($message);
@@ -301,8 +301,8 @@ MAIL: {
         }
     }
     # chiudo la cartella e mi dsconnetto
-    $imap->close or croak(sprintf("\nE- %s\n\t", $imap->LastError));;
-    $imap->logout or croak(sprintf("\nE- %s\n\t", $imap->LastError));;
+    $imap->close or croak(sprintf("\nE- %s\n\t", $imap->LastError));
+    $imap->logout or croak(sprintf("\nE- %s\n\t", $imap->LastError));
     printf("\n%s %i jobs fetched", clock(), $jobcount);
 }
 
