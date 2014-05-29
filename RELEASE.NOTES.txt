@@ -7,6 +7,10 @@ REMEMBER to read...
 
 ...before merging to 'master' branch
 
+*** pre-release 14.7 ***
+(the official name of this release could be varied by changes in progress)
+-
+
 *** release 14.6 ***
 - AMB2GMX: new release (14.5.b)
 - EMMA: read gro files
