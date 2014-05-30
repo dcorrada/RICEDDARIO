@@ -9,7 +9,7 @@ REMEMBER to read...
 
 *** pre-release 14.7 ***
 (the official name of this release could be varied by changes in progress)
--
+- AMB2GMX: new release (14.6.a)
 
 *** release 14.6 ***
 - AMB2GMX: new release (14.5.b)
