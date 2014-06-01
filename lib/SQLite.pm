@@ -59,7 +59,7 @@ sub access2db {
     $self->set_password($arg{'password'}) if exists $arg{'password'};
 
     $self->_raise_error(sprintf("\nE- [SQLite] undef credential\n\t"))
-        unless ($self->get_database && $self->get_user);
+        unless ($self->get_database);
 
     my $datasource = sprintf("DBI:SQLite:dbname=%s", $self->get_database);
     
@@ -94,6 +94,9 @@ sub new_table {
         
         $self->_raise_error(sprintf("\nE- [SQLite] undef table name\n\t"))
             unless ($self->get_table_name);
+        
+        $self->_raise_error(sprintf("\nE- [SQLite] undef arguments for the new table\n\t"))
+            unless ( $arg{'args'} );
     };
     
     # printf ("\nI- creating table [%s.%s]...", $self->get_database, $self->get_table_name);
@@ -102,25 +105,11 @@ sub new_table {
     my $table_name = $self->get_table_name;
     
     # cancello eventuali tabelle pre-esistenti con lo stesso nome
-    $dbh->do("DROP TABLE IF EXISTS $table_name")
+    $dbh->do("DROP TABLE IF EXISTS `$table_name`")
         or $self->_raise_error(sprintf("\nE- [SQLite] statement handle error [%s]\n\t", $dbh->errstr));
     
     # allestimento della query
-    my $query_string = "CREATE TABLE IF NOT EXISTS `$table_name` ( `acc` int(10) NOT NULL AUTO_INCREMENT, ";
-    
-    if ($arg{'args'}) { # aggiungo i campi specifici della tabella
-        my $append = $arg{'args'};
-        $query_string .= $append . ", ";
-    }
-    
-    $query_string .=  "PRIMARY KEY (`acc`)"; # aggiungo la primary key
-    
-    if ($arg{'keys'}) { # aggiungo i chiavi specifiche della tabella
-        my $append = $arg{'keys'};
-        $query_string .= ", " . $append;
-    }
-    
-    $query_string .= " )";
+    my $query_string = "CREATE TABLE IF NOT EXISTS `$table_name` ( $arg{'args'} )";
     
     # eseguo la query
     $self->set_query_string($query_string);
@@ -239,12 +228,10 @@ SQLite - classe generica per la gestione di database
     
     # creo una nuova tabella definendo campi e indici
     my $args = "`species` varchar(255) NOT NULL DEFAULT '', `ID` float(10,3) NOT NULL DEFAULT '0',  `start` int(10) NOT NULL DEFAULT '0', `end` int(10) NOT NULL DEFAULT '0'";
-    my $keys = "KEY `couple` (`species`,`ID`), KEY `range` (`start`, `end`)";
     $obj->new_table(
         'dbh' => $dbh,
         'table' => 'tabella',
         'args' => $args,
-        'keys' => $keys
     );
     
     # eseguo una query con binding values

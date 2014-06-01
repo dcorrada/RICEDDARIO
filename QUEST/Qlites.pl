@@ -20,9 +20,9 @@ use lib $ENV{HOME};
 #   print Dumper($obj);
 use Data::Dumper;
 ###################################################################
+use RICEDDARIO::lib::SQLite;
 use Carp;
 use IO::Socket::INET;
-use DBI;
 use threads;
 use threads::shared;
 use Thread::Semaphore;
@@ -33,9 +33,7 @@ our $conf_file = '/etc/QUEST.conf';
 
 # database
 our $database = '/etc/QUEST.db';
-our $driver = 'SQLite';
-our ($dbusr, $dbpwd) = ('', '');
-our $dsn = "DBI:$driver:dbname=$database";
+our $db_obj;
 our $dbh;
 
 # configurazioni di default
@@ -87,21 +85,22 @@ INIT: {
     # verifico se sono root
     my $username = $ENV{'USER'};
     if ($username eq 'root') {
+        printf("%s access as superuser\n", clock());
         $superuser = 1;
     } else {
-        print "WARNING: server has not been launched as superuser\n";
+        printf("%s access as <$username>\n", clock());
         undef $superuser;
         $conf_file = "$ENV{'HOME'}/.QUEST.conf";
         $database = "$ENV{'HOME'}/.QUEST.db";
-        $dsn =  "DBI:$driver:dbname=$database";
     }
     
     # verifico se esiste un file di configurazione
     unless (-e $conf_file) {
         my $ans;
-        print "\nQUEST server is not yet configured, do you want to proceed? [y/N] ";
+        print "\nQUEST server is not yet configured, do you want to proceed? [Y/n] ";
         $ans = <STDIN>; chomp $ans;
-        goto FINE unless ($ans eq 'y');
+        $ans = 'y' unless ($ans);
+        goto FINE if ($ans !~ /[yY]/);
         print "\n";
         open(CONF, '>' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
         print CONF "# QUEST configuration file\n\n";
@@ -116,8 +115,8 @@ INIT: {
             }
         }
         close CONF;
+        print "\n";
     }
-    print "\nConfiguration settings are stored in <$conf_file>\n\n";
     
     # inizializzo il server leggendo il file di configurazione
     open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
@@ -135,57 +134,42 @@ INIT: {
     close CONF;
     
     # inizializzo il database
-    print "Database is located as <$database>\n\n";
-    $dbh = DBI->connect($dsn, $dbusr, $dbpwd, { RaiseError => 1 })
-        or croak $DBI::errstr;
+    $db_obj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
+    $dbh = $db_obj->access2db();
     
     # inizializzo il semaforo
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
     
-    printf("%s server initialized\n", clock());
-    
+    printf("%s server initialized\n\n", clock());
+    print "    CONFIGS...: $conf_file\n";
+    print "    DATABASE..: $database\n\n";
 }
-goto FINE;
-# SQLITE: {
-#
-# Installation
-# (io ho installato via cpan vedere se funza pure via normale)
-# 
-# The SQLite3 can be integrated with Perl using Perl DBI module, which is a database access module for the Perl programming language. It defines a set of methods, variables and conventions that provide a standard database interface.
-# 
-# Here are simple steps to install DBI module on your Linux/UNIX machine:
-# 
-#     $ wget http://search.cpan.org/CPAN/authors/id/T/TI/TIMB/DBI-1.631.tar.gz
-#     $ tar xvfz DBI-1.631.tar.gz
-#     $ cd DBI-1.631
-#     $ perl Makefile.PL
-#     $ make
-#     $ make install
-#     
-# If you need to install SQLite driver for DBI, then it can be installed as follows:
-# 
-#     $ wget http://search.cpan.org/CPAN/authors/id/I/IS/ISHIGAKI/DBD-SQLite-1.42.tar.gz
-#     $ tar xvfz DBD-SQLite-1.11.tar.gz
-#     $ cd DBD-SQLite-1.11
-#     $ perl Makefile.PL
-#     $ make
-#     $ make install
-# 
-# 
-# 
-#     use DBI;
-# 
-#     my $driver   = "SQLite"; 
-#     my $database = "test.db";
-#     my $dsn = "DBI:$driver:dbname=$database";
-#     my $userid = "";
-#     my $password = "";
-#     my $dbh = DBI->connect($dsn, $userid, $password, { RaiseError => 1 }) 
-#                         or die $DBI::errstr;
-# 
-#     print "Opened database successfully\n";
-#     
-# }
+
+DBTEST: {
+    # Esempio, da mettere come aggiornamento dell'help della libreria SQLite.pm
+    
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'configs',
+        'args' => "`param` TEXT NOT NULL, `value` CHAR(255)"
+    );
+    
+    foreach my $param (sort keys %confs) {
+        my $value = $confs{$param};
+        my $query = "INSERT INTO `configs` (`param`,`value`) VALUES (?, ?)";
+        my $bindings = [ $param, $value ];
+        $db_obj->query_exec('dbh' => $dbh, 'query' => $query, 'bindings' => $bindings);
+    }
+    
+    my $sth = $db_obj->query_exec('dbh' => $dbh, 'query' => 'SELECT * FROM `configs`');
+    my ($row_number, $single_data);
+    while (my $ref_row = $sth->fetchrow_hashref()) {
+        print Dumper $ref_row;
+    }
+    $sth->finish();
+    
+    goto FINE;
+}
 
 CORE: {
     # apro un socket per comunicare con il client
@@ -392,7 +376,8 @@ END
 
 FINE: {
     close $socket if ($socket);
-    printf("\n%s QUEST server stopped\n\n", clock());
+    $dbh->disconnect;
+    printf("%s server stopped\n\n", clock());
     exit;
 }
 
