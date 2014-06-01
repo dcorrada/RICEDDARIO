@@ -29,8 +29,6 @@ my $ref = RICEDDARIO::lib::Generic_class::_hash_joiner(\%RICEDDARIO::lib::Generi
 %_attribute_properties = %$ref;
 
 
-
-
 # apre il file, ritorna il FileHandle del file aperto
 sub _openfile {
     my($self, $filename, $writemode) = @_;
@@ -42,8 +40,7 @@ sub _openfile {
     return $fh;
 }
 
-# Cerca files contraddistinti da un pattern specifico e ritorna una lista
-# di essi completa di path in un array
+# Cerca files contraddistinti da un pattern specifico e ritorna una lista di essi completa di path in un array
 sub search_files {
     my ($self, %arg) = @_;
 
@@ -76,8 +73,7 @@ sub search_files {
     return $list;
 }
 
-# Cerca folders contraddistinte da un pattern specifico e ritorna una lista
-# di essi completa di path in un array
+# Cerca folders contraddistinte da un pattern specifico e ritorna una lista di essi completa di path in un array
 sub search_dir {
     use Cwd;
     my ($self, %arg) = @_;

@@ -26,7 +26,6 @@ sub _all_attributes {
     my($self) = @_;
     no strict;
     return keys %{ref($self) . '::_attribute_properties'};
-    
 }
 
 # Verifica gli accessi dell'attributo
@@ -55,10 +54,10 @@ sub _reinit {
 sub _source {
     my ($self, $name) = @_;
     
-    print "\nW- reinizializzazione attributi...";
+    print "\nW- [Generic_class] reinitializing attributes...";
     foreach my $attribute ($self->_all_attributes()) {
         if ($self->_permissions($attribute, 'init')) { # verifico se l'attributo può essere inizializzato
-#             verifico la tipologia dell'attributo
+            # verifico la tipologia dell'attributo
             if ($self->{$attribute} =~ /^ARRAY\(\w+\)$/) {
                 $self->{$attribute} = [ ]; next;
             } elsif ($self->{$attribute} =~ /^HASH\(\w+\)$/) {
@@ -68,7 +67,7 @@ sub _source {
             };
         }
     }
-    print "OK";
+    print "done";
 }
 
 # Ritorna il valore di default dell'attributo
@@ -78,8 +77,7 @@ sub _attribute_default {
     return ${ref($self) . '::_attribute_properties'}{$attribute}[0];
 }
 
-# Verifica che le chiavi di hash passate come argomento corrispondano
-# agli attributi della classe
+# Verifica che le chiavi di hash passate come argomento corrispondano agli attributi della classe
 sub _check_attributes {
     my ($self, @arg_list) = @_;
     my @attribute_list = $self->_all_attributes();
@@ -87,47 +85,68 @@ sub _check_attributes {
 
     foreach my $arg (@arg_list) {
         unless (exists $self->{'_'.$arg}) {
-            print "\nW- Attributo _$arg non previsto\n";
+            print "\nW- [Generic_class] Attribute _$arg unknown\n";
             $attributes_not_found++;
         }
     }
     return $attributes_not_found;
 }
 
-# Manda un messaggio di errore stampando il contenuto
-# dell'attributo _exception e interrompendo il programma
+# Manda un messaggio di errore stampando il contenuto dell'attributo _exception e interrompendo il programma
 sub _raise_error {
    my ($self, $mess) = @_;
    $mess and do {
         $self->{'_exception'} = $mess;
    };
    
+   # scrivo il trailer sul file di log
+   my ($sec,$min,$ore,$giom,$mese,$anno,$gios,$gioa,$oraleg) = localtime(time);
+   $mese = $mese+1;
+   $mese = sprintf("%02d", $mese);
+   $giom = sprintf("%02d", $giom);
+   $ore = sprintf("%02d", $ore);
+   $min = sprintf("%02d", $min);
+   $sec = sprintf("%02d", $sec);
+   my $date = ($anno+1900)."/$mese/$giom - $ore:$min:$sec";
+   
    $self->{'_errfile'} and do { # se un logfile è settato scrivo il messaggio di errore
         my $fh;
-        open($fh, '>>' . $self->{'_errfile'}) or croak (sprintf("\n\tE- Impossibile aprire il file <%s>\n\t", $self->{'_errfile'}));
-        print $fh $mess;
+        open($fh, '>>' . $self->{'_errfile'}) or croak (sprintf("\n\tE- [Generic_class] Unable to open file <%s>\n\t", $self->{'_errfile'}));
+        print $fh $mess . " < $date";
         close $fh;
    };
    
    croak $self->get_exception();
-
 }
 
-# Manda un messaggio di warning stampando il contenuto
-# dell'attributo _exception e interrompendo il programma
+# Manda un messaggio di warning stampando il contenuto dell'attributo _exception e interrompendo il programma
 sub _raise_warning {
    my ($self, $mess) = @_;
    $mess and do {
         $self->{'_exception'} = $mess;
    };
-   carp $self->get_exception();
-
+   
+   # scrivo il trailer sul file di log
+   my ($sec,$min,$ore,$giom,$mese,$anno,$gios,$gioa,$oraleg) = localtime(time);
+   $mese = $mese+1;
+   $mese = sprintf("%02d", $mese);
+   $giom = sprintf("%02d", $giom);
+   $ore = sprintf("%02d", $ore);
+   $min = sprintf("%02d", $min);
+   $sec = sprintf("%02d", $sec);
+   my $date = ($anno+1900)."/$mese/$giom - $ore:$min:$sec";
+   
+   $self->{'_errfile'} and do { # se un logfile è settato scrivo il messaggio di errore
+        my $fh;
+        open($fh, '>>' . $self->{'_errfile'}) or croak (sprintf("\n\tE- [Generic_class] Unable to open file <%s>\n\t", $self->{'_errfile'}));
+        print $fh $mess . " < $date";
+        close $fh;
+   };
+   
+   print $self->get_exception();
 }
 
-# unisce due hash dando la precedenza ai valori contenuti nella hash
-# referenziata con $child; serve per unire le liste di attributi
-# tra una classe madre e quella che eredita.
-# Ritorna un hash_ref della combinazione dei due.
+# unisce due hash dando la precedenza ai valori contenuti nella hash referenziata con $child; serve per unire le liste di attributi tra una classe madre e quella che eredita. Ritorna un hash_ref della combinazione dei due.
 sub _hash_joiner {
     my ($mother, $child) = @_;
     
@@ -138,7 +157,6 @@ sub _hash_joiner {
     }
     
     return \%inherited;
-
 }
 
 # COSTRUTTORE
@@ -156,7 +174,7 @@ sub new {
             if ($self->_permissions($attribute, 'write')) {
                 $self->{$attribute} = $arg{$1};
             } else {
-                print "\nW- Attributo $attribute disponibile in sola lettura\n";
+                print "\nW- [Generic_class] $attribute is a readonly attribute\n";
                 $self->{$attribute} = $self->_attribute_default($attribute);
             }
         # ...o con il valore di default altrimenti
@@ -195,7 +213,7 @@ sub AUTOLOAD {
     my ($operation, $attribute) = $AUTOLOAD =~ /^\w+::\w+::\w+::([a-zA-Z0-9]+)_(\w+)$/;
 
     if ($operation, $attribute) {
-        $self->_check_attributes($attribute) and $self->_raise_error("\nE- [Generic_class] Metodo $AUTOLOAD non previsto\n\t");
+        $self->_check_attributes($attribute) and $self->_raise_error("\nE- [Generic_class] Method $AUTOLOAD unknown\n\t");
         $attribute = '_'.$attribute;
 
         # metodi per la lettura di attributi
@@ -231,8 +249,7 @@ sub AUTOLOAD {
     use warnings;
 }
 
-# Definisce come si comporta l'oggetto chiamato una volta uscito dal
-# proprio scope
+# Definisce come si comporta l'oggetto chiamato una volta uscito dal proprio scope
 sub DESTROY {
     my ($self) = @_;
 
