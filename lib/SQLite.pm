@@ -120,7 +120,7 @@ sub new_table {
         $query_string .= ", " . $append;
     }
     
-    $query_string .= " ) ENGINE=MyISAM DEFAULT CHARSET=latin1;";
+    $query_string .= " )";
     
     # eseguo la query
     $self->set_query_string($query_string);
@@ -234,9 +234,6 @@ SQLite - classe generica per la gestione di database
     # instanzio un nuovo oggetto
     my $obj = RICEDDARIO::lib::SQLite->new('user' => 'foo', 'password' => 'barbaz');
     
-    # creo un nuovo DB
-    $obj->new_database('sparta');
-    
     # accedo al DB
     my $dbh = $obj->access2db('database' => 'sparta');
     
@@ -275,23 +272,6 @@ SQLite - classe generica per la gestione di database
         database    => $self->get_database
         user        => $self->get_user
         password    => $self->get_password
-    
-
-=head2 new_database([$database])
-    
-    Crea un nuovo database. Le credenziali di accesso a mySQL vengono definite con
-    il metodo costruttore.
-    ATTENZIONE: se esiste gia' una database con lo stesso nome verra' sovrascritto.
-    
-    DEFAULTS:
-        $database    = $self->get_database
-    
-=head2 db_dump()
-    
-        $string = $self->db_dump();
-    
-    Fa il dump di un database esistente (ie $self->get_database()), comprime il file
-    SQL in un tarball e restituisce il nome del file.
     
 
 =head2 new_table(dbh => $dbh, [table => $string, args => $string, keys => $string])
