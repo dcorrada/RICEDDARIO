@@ -136,6 +136,16 @@ INIT: {
     # inizializzo il database
     $db_obj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
     $dbh = $db_obj->access2db();
+    my $sth = $db_obj->query_exec(
+        'dbh' => $dbh, 
+        'query' => 'SELECT name FROM sqlite_master WHERE type = "table"'
+    );
+    my $table_list = $sth->fetchall_arrayref();
+    if (scalar @{$table_list} == 0) { # il database è vuoto
+        init_database();
+    } else {
+        print Dumper $table_list;
+    }
     
     # inizializzo il semaforo
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
@@ -145,31 +155,33 @@ INIT: {
     print "    DATABASE..: $database\n\n";
 }
 
-DBTEST: {
-    # Esempio, da mettere come aggiornamento dell'help della libreria SQLite.pm
-    
-    $db_obj->new_table(
-        'dbh' => $dbh,
-        'table' => 'configs',
-        'args' => "`param` TEXT NOT NULL, `value` CHAR(255)"
-    );
-    
-    foreach my $param (sort keys %confs) {
-        my $value = $confs{$param};
-        my $query = "INSERT INTO `configs` (`param`,`value`) VALUES (?, ?)";
-        my $bindings = [ $param, $value ];
-        $db_obj->query_exec('dbh' => $dbh, 'query' => $query, 'bindings' => $bindings);
-    }
-    
-    my $sth = $db_obj->query_exec('dbh' => $dbh, 'query' => 'SELECT * FROM `configs`');
-    my ($row_number, $single_data);
-    while (my $ref_row = $sth->fetchrow_hashref()) {
-        print Dumper $ref_row;
-    }
-    $sth->finish();
-    
-    goto FINE;
-}
+goto FINE;
+
+# DBTEST: {
+#     # Esempio, da mettere come aggiornamento dell'help della libreria SQLite.pm
+#     
+#     $db_obj->new_table(
+#         'dbh' => $dbh,
+#         'table' => 'configs',
+#         'args' => "`param` TEXT NOT NULL, `value` CHAR(255)"
+#     );
+#     
+#     foreach my $param (sort keys %confs) {
+#         my $value = $confs{$param};
+#         my $query = "INSERT INTO `configs` (`param`,`value`) VALUES (?, ?)";
+#         my $bindings = [ $param, $value ];
+#         $db_obj->query_exec('dbh' => $dbh, 'query' => $query, 'bindings' => $bindings);
+#     }
+#     
+#     my $sth = $db_obj->query_exec('dbh' => $dbh, 'query' => 'SELECT * FROM `configs`');
+#     my ($row_number, $single_data);
+#     while (my $ref_row = $sth->fetchrow_hashref()) {
+#         print Dumper $ref_row;
+#     }
+#     $sth->finish();
+#     
+#     goto FINE;
+# }
 
 CORE: {
     # apro un socket per comunicare con il client
@@ -411,7 +423,7 @@ sub launch_thread {
         push (@queued, $jobline);
         
         # metto il job nella scaletta dei job che dovranno partire
-        my $position = sprintf("%s%04d%012d-%s", $threads, $queue_type, time, $jobid);
+        my $position = sprintf("%04d%s%012d-%s", $threads, $queue_type, time, $jobid);
         push(@sorted,$position);
         @sorted = sort {$a cmp $b} @sorted;
     }
@@ -615,4 +627,25 @@ sub getcpid {
         push(@children, $child);
         &getcpid($child);
     }
+}
+
+sub init_database {
+    # status dei job ('queued', 'running' o 'finished')
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'jobstatus',
+        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `status` CHAR(8) NOT NULL"
+    );
+    # path dei file associati ai job
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'jobfiles',
+        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `shscript` CHAR(255) NOT NULL, `logfile` CHAR(255) NOT NULL"
+    );
+    # parametri di sottomissione
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'details',
+        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` CHAR(4) NOT NULL, `user` CHAR(16) NOT NULL, `date` "2014/04/30 21:53:31
+    );
 }
