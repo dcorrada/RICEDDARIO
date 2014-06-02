@@ -21,6 +21,7 @@ use lib $ENV{HOME};
 use Data::Dumper;
 ###################################################################
 use RICEDDARIO::lib::SQLite;
+use RICEDDARIO::lib::FileIO;
 use Carp;
 use IO::Socket::INET;
 use threads;
@@ -28,38 +29,36 @@ use threads::shared;
 use Thread::Semaphore;
 
 ## GLOBS ##
-# file di configurazione
-our $conf_file = '/etc/QUEST.conf';
 
-# database
-our $database = '/etc/QUEST.db';
-our $db_obj;
-our $dbh;
-
-# configurazioni di default
-our %confs = (
+# COMUNICAZIONE CLIENT/SERVER
+our $conf_file = '/etc/QUEST.conf'; # file di configurazione
+our %confs = ( # valori di default
     'host'      => '127.0.0.1',        # IP address del localhost
     'port'      => '6090',             # porta
     'threads'   => '8',                # numero massimo di threads concorrenti
-    'maxsub'    => '1000',             # numero massimo di submission che il server puo' sopportare
 );
+our $socket; # oggetto IO::Socket::INET
 
-our $socket; # l'oggetto per gestire la comunicazione client/server
+# DATABASE
+our $database = '/etc/QUEST.db'; # file del database
+our $db_obj; # oggetto RICEDDARIO::lib::SQLite
+our $dbh; # database handler
+our $sth; # statement handler
 
-# lo script intecetta segnali di interrupt e li redirige ad una subroutine (v. sotto)our @children;
-$SIG{'INT'} = \&sigIntHandler; # il tipico Ctrl+C
-$SIG{'TERM'} = \&sigIntHandler; # il segnale di kill dato con top (ie SIGTERM 15)
+# SHUTDOWN
+# lo script sigIntHandler intecetta segnali di interrupt
+$SIG{'INT'} = \&sigIntHandler; # segnale dato da Ctrl+C
+$SIG{'TERM'} = \&sigIntHandler; # segnale di kill (SIGTERM 15)
 our $poweroff; # la variabile gestita dalla suboutine &sigIntHandler
 
-our $superuser; # definisce se usare il server come superuser
+# THREADING
+our $semaforo; # semaforo basato per il blocco dei threads 
+our $dbaccess :shared; # accesso esclusivo al database
 
-our $semaforo;
-our @thr; # lista dei threads
-our %killerlist;
-our @children;
-our (@queued, @running, @sorted) :shared; # lista dei job accodati e running
-
-our $submitted = 0E0;
+# OTHERS
+our $superuser; # il server è stato lanciato come superuser?
+our $fileobj = RICEDDARIO::lib::FileIO->new(); # oggetto RICEDDARIO::lib::FileIO
+our @children; # elenco dei PID di processi figli di un job
 
 ## SBLOG ##
 
@@ -67,7 +66,7 @@ SPLASH: {
     my $splash = <<END
 ********************************************************************************
 QUEST - QUEue your ScripT
-release 14.5.d
+release 14.6.a
 
 Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -136,16 +135,12 @@ INIT: {
     # inizializzo il database
     $db_obj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
     $dbh = $db_obj->access2db();
-    my $sth = $db_obj->query_exec(
-        'dbh' => $dbh, 
+    $sth = $db_obj->query_exec( 'dbh' => $dbh, 
         'query' => 'SELECT name FROM sqlite_master WHERE type = "table"'
     );
     my $table_list = $sth->fetchall_arrayref();
-    if (scalar @{$table_list} == 0) { # il database è vuoto
-        init_database();
-    } else {
-        print Dumper $table_list;
-    }
+    $sth->finish();
+    init_database() if (scalar @{$table_list} == 0);
     
     # inizializzo il semaforo
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
@@ -156,32 +151,6 @@ INIT: {
 }
 
 goto FINE;
-
-# DBTEST: {
-#     # Esempio, da mettere come aggiornamento dell'help della libreria SQLite.pm
-#     
-#     $db_obj->new_table(
-#         'dbh' => $dbh,
-#         'table' => 'configs',
-#         'args' => "`param` TEXT NOT NULL, `value` CHAR(255)"
-#     );
-#     
-#     foreach my $param (sort keys %confs) {
-#         my $value = $confs{$param};
-#         my $query = "INSERT INTO `configs` (`param`,`value`) VALUES (?, ?)";
-#         my $bindings = [ $param, $value ];
-#         $db_obj->query_exec('dbh' => $dbh, 'query' => $query, 'bindings' => $bindings);
-#     }
-#     
-#     my $sth = $db_obj->query_exec('dbh' => $dbh, 'query' => 'SELECT * FROM `configs`');
-#     my ($row_number, $single_data);
-#     while (my $ref_row = $sth->fetchrow_hashref()) {
-#         print Dumper $ref_row;
-#     }
-#     $sth->finish();
-#     
-#     goto FINE;
-# }
 
 CORE: {
     # apro un socket per comunicare con il client
@@ -393,191 +362,76 @@ FINE: {
     exit;
 }
 
-sub launch_thread {
-    my ($cmd_line, $logfile, $threads, $user, $jobid, $workdir, $schrodinger, $queue_type) = @_;
+sub superslot {
+    my $jobid;
+    my $ref_row;
+    my $threads; 
     
-    # Thread 'cancellation' signal handler
-    $SIG{'TERM'} = sub {
+    while (1) {
         {
-            lock @queued; lock @running; lock @sorted;
-            @queued = grep(!/$jobid/, @queued);
-            @running = grep(!/$jobid/, @running);
-            @sorted = grep(!/$jobid/, @sorted);
-        }
-        printf("%s job [%s] killed\n", clock(), $jobid);
-        threads->exit();
-    };
-    
-    my $jobline;
-    my $queue_time;
-    my $running_time;
-    
-    $queue_time = time;
-    
-    { # metto il job nella lista dei queued
-        lock @queued; lock @sorted;
-        $jobline = sprintf(
-            "%s  % 8s  %s  %s  %s  <%s>",
-            clock(), $user, $threads, $queue_type, $jobid, $cmd_line
-        );
-        push (@queued, $jobline);
-        
-        # metto il job nella scaletta dei job che dovranno partire
-        my $position = sprintf("%04d%s%012d-%s", $threads, $queue_type, time, $jobid);
-        push(@sorted,$position);
-        @sorted = sort {$a cmp $b} @sorted;
-    }
-    
-    # attendo che si liberino threads e che, contestualmente, il job in coda sia in cima alla scaletta
-    my $waitasecond = 1;
-    while ($waitasecond) { 
-        if (${$semaforo} >= $threads) {
-            my $ontop = $sorted[0];
-            if ($ontop =~ /$jobid/) {
-                { lock @sorted; shift @sorted; }
-                undef $waitasecond;
-            }
-        }
-        sleep 1;
-    }
-    
-    $queue_time = time - $queue_time;
-    $running_time = time;
-    
-    for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
-#     print "$threads taken (${$semaforo} available)\n";
-    
-    { # metto il job nella lista dei running e lo tolgo dai queued
-        lock @queued; lock @running;
-        @queued = grep(!/$jobid/, @queued);
-        $jobline = sprintf(
-            "%s  % 8s  %s  %s  %s  <%s>", 
-            clock(), $user, $threads, $queue_type, $jobid, $cmd_line
-        );
-        push (@running, $jobline);
-    }
-    
-    printf("%s job [%s] started\n", clock(), $jobid);
-    
-    # lancio del job, redirigo STDOUT e STDERR sul file di log
-    my $joblog;
-    if ($superuser) {
-        qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$cmd_line >> $logfile 2>&1"/;
-    } else {
-        qx/cd $workdir; touch $logfile; $cmd_line >> $logfile 2>&1/;
-    }
-    
-    if ($schrodinger eq 'true') { # blocco ad-hoc per i job della Schrodinger
-        
-        my $signature;
-        
-        # leggo il logfile per catturare il JobID assegnato da Schrodinger
-        my $waitforjobid = 1;
-        while ($waitforjobid) {
-            my $string = qx/grep "JobId:" $logfile/;
-            chomp $string;
-            if ($string) {
-                ($signature) = $string =~ /JobId: (.+)/;
-                undef $waitforjobid;
-                # una volta che ottengo il JobID aspetto ancora un po' (se facessi partire subito un top cercando un processo contenente il JobID come stringa non troverei nulla)
-                sleep 5;
-            } else {
-                sleep 1; # continuo a ciclare fino a quando non ottengo un JobID
-            }
-        }
-        
-        {
-            lock @running;
-            @running = grep(!/$jobid/, @running);
-            $jobline = sprintf(
-                "%s  % 8s  %s  %s  %s [Schrodinger: %s]  <%s>", 
-                clock(), $user, $threads, $queue_type, $jobid, $signature, $cmd_line
+            # con questo blocco la sub sta in standby fintanto che non trova un job disponibile a partire
+            
+            lock $dbaccess;
+            
+            # estraggo il primo job dalla lista degli accodati
+            $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+                'query' => 'SELECT * FROM queuelist'
             );
-            push (@running, $jobline);
-        }
-        
-        # i job della Schrodinger fanno da se' un detach una volta partiti e lo script finirebbe, genero un loop che guarda se il monitor di Schrodinger controlla il JobID specifico
-        my $is_running = 1;
-        while ($is_running) {
-            my $pslog = qx/ps aux | grep "$signature"/;
-            my @procs = split("\n", $pslog);
-            @procs = grep(!/ps aux/, @procs);
-            @procs = grep(!/grep/, @procs);
-#             print Dumper \@procs;
-            if (@procs) {
-                sleep 5;
-            } else {
-                undef $is_running;
+            my %queued;
+            while ($ref_row = $sth->fetchrow_hashref()) {
+                my $key = $ref_row->{'score'};
+                my $value = $ref_row->{'jobid'};
+                $queued{$key} = $value;
             }
-        }
-    }
-    
-    $running_time = time - $running_time;
-    open (LOGFILE, '>>' . $logfile);
-    my @timex = localtime($queue_time);
-    $queue_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
-    @timex = localtime($running_time);
-    $running_time = sprintf("%02d:%02d:%02d", $timex[2]-1, $timex[1], $timex[0]);
-    my $summary = <<END
-*** QUEST SUMMARY ***
-EXECUTABLE.....: $cmd_line
-WORKING DIR....: $workdir
-THREADS USED...: $threads
-QUEUED TIME....: $queue_time
-RUNNING TIME...: $running_time
-
-END
-    ;
-    print LOGFILE $summary;
-    close LOGFILE;
-    
-    for (1..$threads) { $semaforo->up() }; # libero tanti threads quanti richiesti
-#     print "$threads released (${$semaforo} available)\n";
-    
-    { # rimuovo il job dalla lista dei running
-        lock @running;
-        @running = grep(!/$jobid/, @running);
-    }
-    
-    printf("%s job [%s] finished\n", clock(), $jobid);
-}
-
-sub job_monitor {
-    my $log;
-    {   lock @queued; lock @running;
-        
-        # modifico la lista dei running fornendo il PID invece del path dello script lanciato
-        for (my $i = 0; $i < scalar @running; $i++) {
-            my $newline = $running[$i];
-            if ($newline =~ /\[Schrodinger:/) {
-                next; # sono job della Schrodinger, non troverei il PID
-            } elsif ($newline =~ /\[PID:/) {
-                next; # sono job gia' flaggati, passo oltre
+            $sth->finish();
+            my @sorted = sort {$a cmp $b} keys %queued;
+            $jobid = $queued{$sorted[0]};
+            
+            # verifico il numero di threads che richiede il job
+            $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+                'query' => 'SELECT jobid, threads FROM subdetails WHERE jobid = ?',
+                'bindings' => [ $jobid ]
+            );
+            $ref_row = $sth->fetchrow_hashref();
+            $sth->finish();
+            $threads = $ref_row->{'threads'};
+            if ($threads > ${$semaforo}) {
+                sleep 1;
+                next;
             } else {
-                my ($jobid, $script) = $newline =~ /(\w{8})  <(.+)>/;
-                my $string = "QUEST.job.$jobid.log";
-                my $psaux = qx/ps aux \| grep -P " $script >> .*$string"/;
-                my @procs = split("\n", $psaux);
-                my ($match) = grep(!/grep/, @procs);
-                if ($match) {
-                    my ($pid) = $match =~ /\w+\s*(\d+)/;
-                    $newline =~ s/<.+>/[PID: $pid]  <$script>/;
-                    $running[$i] = $newline;
-                }
+                # rimuovo il job dalla queuelist se può partire
+                $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'DELETE FROM queuelist WHERE jobid =?',
+                    'bindings' => [ $jobid ]
+                );
+                $sth->finish();
             }
         }
         
-        $log = sprintf("\nAvalaible threads %d of %d\n", ${$semaforo}, $confs{'threads'});
-        $log .= "\n--- JOB RUNNING ---\n";
-        foreach my $jobid (@running) {
-            $log .= "$jobid\n";
+        my $start_time = time;
+        for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
+        {
+            # aggiorno il database
+            
+            lock $dbaccess;
+            
+            $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+                'query' => 'UPDATE jobstatus SET status = "running" WHERE jobid =?',
+                'bindings' => [ $jobid ]
+            );
+            $sth->finish();
+            
+            # i campi 'pid' e 'schroid' li aggiornerò con il monitor
+            $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+                'query' => 'INSERT INTO runlist (jobid, rundate) VALUES (?, ?)',
+                'bindings' => [ $jobid,  $start_time ]
+            );
+            $sth->finish();
         }
-        $log .= "\n--- JOB QUEUED ---\n";
-        foreach my $jobid (@queued) {
-            $log .= "$jobid\n";
-        }
+        
+        
+        # *** DAFFARE ***
     }
-    return $log
 }
 
 
@@ -634,18 +488,30 @@ sub init_database {
     $db_obj->new_table(
         'dbh' => $dbh,
         'table' => 'jobstatus',
-        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `status` CHAR(8) NOT NULL"
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `status` TEXT NOT NULL"
     );
-    # path dei file associati ai job
+    # scriptfile associati ai job
     $db_obj->new_table(
         'dbh' => $dbh,
         'table' => 'jobfiles',
-        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `shscript` CHAR(255) NOT NULL, `logfile` CHAR(255) NOT NULL"
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `filename` TEXT NOT NULL, `content` TEXT NOT NULL"
     );
     # parametri di sottomissione
     $db_obj->new_table(
         'dbh' => $dbh,
-        'table' => 'details',
-        'args' => "`jobid` CHAR(8) PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` CHAR(4) NOT NULL, `user` CHAR(16) NOT NULL, `date` "2014/04/30 21:53:31
+        'table' => 'subdetails',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` TEXT NOT NULL, `user` TEXT NOT NULL, `subdate` TEXT NOT NULL, `schrodinger` INT NOT NULL DEFAULT `0`" # la data va convertita con la funzione localtime
+    );
+    # parametri di running
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'runlist',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `pid` INT, `schroid` TEXT, `rundate` TEXT NOT NULL" # la data va convertita con la funzione localtime
+    );
+    # lista dei job accodati, score è un valore su cui si valuta la priorità dei job
+    $db_obj->new_table(
+        'dbh' => $dbh,
+        'table' => 'queuelist',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL" # la data va convertita con la funzione localtime
     );
 }
