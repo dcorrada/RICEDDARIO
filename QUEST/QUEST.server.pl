@@ -150,13 +150,10 @@ INIT: {
     # lancio gli slot, il numero di slot aperti equivale al numero di threads (ie numero massimo di thread concorrenti)
     for (my $i = 0; $i < $confs{'threads'}; $i++) {
         my $thr = threads->new(\&superslot, $i);
-#         $thr->detach();
+        $thr->detach();
         $slotobj[$i] = $thr; # raccolgo l'oggetto 'threads' in un array
 #         printf("%s slot %d opened\n", clock(), $i);
     }
-# threads->new(\&superslot, 1);
-# sleep 1;
-# threads->new(\&superslot, 2);
     
     printf("%s server initialized\n\n", clock());
     print "    CONFIGS...: $conf_file\n";
@@ -240,7 +237,7 @@ sub superslot {
             $slotsth->finish();
             
             unless (%queued) { # non ci sono job accodati
-                sleep 0.25;
+                sleep 1;
                 { lock @slotstatus; $slotstatus[$slotid] = 'empty'; }
                 next;
             };
@@ -257,11 +254,12 @@ sub superslot {
             $slotsth->finish();
             $threads = $ref_row->{'threads'};
             if ($threads > ${$semaforo}) {
-                sleep 0.25;
+                sleep 1;
                 { lock @slotstatus; $slotstatus[$slotid] = 'standby'; }
                 next;
             } else {
                 # rimuovo il job dalla queuelist se può partire
+                lock $dbaccess;
                 $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
                     'query' => 'DELETE FROM queuelist WHERE jobid =?',
                     'bindings' => [ $jobid ]
@@ -273,27 +271,23 @@ sub superslot {
             
         }
         
-#         my $start_time = time;
-#         for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
-#         {
-#             # aggiorno il database
-#             
-#             lock $dbaccess;
-#             
-#             $sth = $db_obj->query_exec( 'dbh' => $dbh, 
-#                 'query' => 'UPDATE jobstatus SET status = "running" WHERE jobid =?',
-#                 'bindings' => [ $jobid ]
-#             );
-#             $sth->finish();
-#             
-#             # i campi 'pid' e 'schroid' li aggiornerò con il monitor
-#             $sth = $db_obj->query_exec( 'dbh' => $dbh, 
-#                 'query' => 'INSERT INTO runlist (jobid, rundate) VALUES (?, ?)',
-#                 'bindings' => [ $jobid,  $start_time ]
-#             );
-#             $sth->finish();
-#         }
-#         
+        my $start_time = time;
+        for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
+        
+        {
+            # aggiorno il database
+            lock $dbaccess;
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'UPDATE jobstatus SET status = "running" WHERE jobid =?',
+                'bindings' => [ $jobid ]
+            );
+            $slotsth->finish();
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'INSERT INTO runlist (jobid, rundate) VALUES (?, ?)',
+                'bindings' => [ $jobid,  $start_time ]
+            );
+            $sth->finish();
+        }
         
         
         $slotdbh->disconnect;
