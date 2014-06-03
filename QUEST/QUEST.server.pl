@@ -375,7 +375,7 @@ sub launch_thread {
         push (@queued, $jobline);
         
         # metto il job nella scaletta dei job che dovranno partire
-        my $position = sprintf("%s%04d%012d-%s", $threads, $queue_type, time, $jobid);
+        my $position = sprintf("%04d%s%012d-%s", $threads, $queue_type, time, $jobid);
         push(@sorted,$position);
         @sorted = sort {$a cmp $b} @sorted;
     }
