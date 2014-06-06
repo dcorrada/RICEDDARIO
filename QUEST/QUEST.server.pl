@@ -383,10 +383,16 @@ sub launch_thread {
     # attendo che si liberino threads e che, contestualmente, il job in coda sia in cima alla scaletta
     my $waitasecond = 1;
     while ($waitasecond) { 
+#         print Dumper \@sorted;
         if (${$semaforo} >= $threads) {
             my $ontop = $sorted[0];
             if ($ontop =~ /$jobid/) {
-                { lock @sorted; shift @sorted; }
+                { 
+                    lock @sorted;
+                    for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
+#                     print "$threads taken (${$semaforo} available)\n";
+                    shift @sorted;
+                }
                 undef $waitasecond;
             }
         }
@@ -395,9 +401,6 @@ sub launch_thread {
     
     $queue_time = time - $queue_time;
     $running_time = time;
-    
-    for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
-#     print "$threads taken (${$semaforo} available)\n";
     
     { # metto il job nella lista dei running e lo tolgo dai queued
         lock @queued; lock @running;
