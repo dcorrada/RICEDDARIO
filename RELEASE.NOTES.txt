@@ -10,6 +10,8 @@ REMEMBER to read...
 *** pre-release 14.7 ***
 (the official name of this release could be varied by changes in progress)
 - AMB2GMX: new release (14.6.a)
+- miniAMBER.fix: alternative version of <miniAMBER.pl> with constrained workflow
+- QUEST: bugfix related to managing the queue list
 
 *** release 14.6 ***
 - AMB2GMX: new release (14.5.b)
