@@ -184,8 +184,10 @@ TLEAPS: {
     # copio i file di input
     mkdir 'TOPOLOGY';
     $workdir = $basepath . 'TOPOLOGY';
-    qx/cp $ligprefix.mol2 $workdir\//;
-    qx/cp $ligprefix.frcmod $workdir\//;
+    unless ($ligprefix eq 'null') {
+        qx/cp $ligprefix.mol2 $workdir\//;
+        qx/cp $ligprefix.frcmod $workdir\//;
+    }
     qx/cp $ARGV[0] $workdir\//;
     
     my $logfile = $workdir . '/miniAMBER.log';
