@@ -384,11 +384,11 @@ sub launch_thread {
     my $waitasecond = 1;
     while ($waitasecond) { 
 #         print Dumper \@sorted;
-        if (${$semaforo} >= $threads) {
-            my $ontop = $sorted[0];
-            if ($ontop =~ /$jobid/) {
-                { 
-                    lock @sorted;
+        { 
+            lock @sorted;
+            if (${$semaforo} >= $threads) {
+                my $ontop = $sorted[0];
+                if ($ontop =~ /$jobid/) {
                     for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
 #                     print "$threads taken (${$semaforo} available)\n";
                     shift @sorted;
