@@ -133,7 +133,6 @@ END
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
     
     printf("%s server initialized\n", clock());
-    
 }
 
 CORE: {
@@ -382,17 +381,15 @@ sub launch_thread {
     
     # attendo che si liberino threads e che, contestualmente, il job in coda sia in cima alla scaletta
     my $waitasecond = 1;
-    while ($waitasecond) { 
+    while ($waitasecond) {
 #         print Dumper \@sorted;
-        { 
-            lock @sorted;
-            if (${$semaforo} >= $threads) {
-                my $ontop = $sorted[0];
-                if ($ontop =~ /$jobid/) {
-                    for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
+        if (${$semaforo} >= $threads) {
+            my $ontop = $sorted[0];
+            if ($ontop =~ /$jobid/) {
+                lock @sorted;
+                for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
 #                     print "$threads taken (${$semaforo} available)\n";
-                    shift @sorted;
-                }
+                shift @sorted;
                 undef $waitasecond;
             }
         }
