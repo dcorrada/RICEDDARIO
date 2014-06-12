@@ -14,6 +14,8 @@ REMEMBER to read...
 - miniAMBER.fix: alternative version of <miniAMBER.pl> with constrained workflow
 - miniAMBER: minor bugfix
 - QUEST: bugfix related to managing the queue list
+- ISABEL: new release (14.6.a)
+- BRENDA: new release (14.6.a)
 
 #### ROBA DA AGGIORNARE SULLA PAGINA WIKI PRINCIPALE ###########################
 WARNING: for users who had already installed earlier version of riceddario (14.6 or previous) please modify the bashrc file as follows (the path "/home/dario" will have to be substituted as well):
