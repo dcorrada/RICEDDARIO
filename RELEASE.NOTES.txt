@@ -17,6 +17,10 @@ REMEMBER to read...
 - ISABEL: new release (14.6.a)
 - BRENDA: new release (14.6.a)
 
+#### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
+Fare una pagina wiki in cui discutere di ISABEL e BRENDA assieme, dal momento che BRENDA è il core program e ISABEL è diventato un wrapper che richiama BRENDA
+################################################################################
+
 #### ROBA DA AGGIORNARE SULLA PAGINA WIKI PRINCIPALE ###########################
 WARNING: for users who had already installed earlier version of riceddario (14.6 or previous) please modify the bashrc file as follows (the path "/home/dario" will have to be substituted as well):
 

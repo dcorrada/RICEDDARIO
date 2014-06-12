@@ -203,7 +203,7 @@ ROGER
     ;
     qx/$cleansweep/;
     
-    my $log = qx/$bins{'BRENDA'} ISABEL.DECOMP_MMPBSA.dat -filter 4 2>&1/;
+    my $log = qx/$bins{'BRENDA'} ISABEL.DECOMP_MMPBSA.dat 2>&1/;
     print ISALOG $log;
     print "done\n"
 }
