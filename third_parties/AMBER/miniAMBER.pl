@@ -30,7 +30,6 @@ our $basepath = $workdir . '/';
 our $AMBERHOME = $ENV{'AMBERHOME'};
 our $mpi = 'null';
 our $ligprefix = 'null';
-our $quest;
 our %bins = ( # file binari
     'tleap'     =>  $AMBERHOME . '/bin/tleap',
     'sander'    =>  $AMBERHOME . '/bin/pmemd',
@@ -44,7 +43,7 @@ our $boxtype = 'oct';
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('mpi=i' => \$mpi, 'lig=s' => \$ligprefix, 'quest' => \$quest , 'box' => \$boxtype);
+    GetOptions('mpi=i' => \$mpi, 'lig=s' => \$ligprefix, 'box' => \$boxtype);
     my $usage = <<END
 ********************************************************************************
 miniAMBER
@@ -184,8 +183,10 @@ TLEAPS: {
     # copio i file di input
     mkdir 'TOPOLOGY';
     $workdir = $basepath . 'TOPOLOGY';
-    qx/cp $ligprefix.mol2 $workdir\//;
-    qx/cp $ligprefix.frcmod $workdir\//;
+    unless ($ligprefix eq 'null') {
+        qx/cp $ligprefix.mol2 $workdir\//;
+        qx/cp $ligprefix.frcmod $workdir\//;
+    }
     qx/cp $ARGV[0] $workdir\//;
     
     my $logfile = $workdir . '/miniAMBER.log';
