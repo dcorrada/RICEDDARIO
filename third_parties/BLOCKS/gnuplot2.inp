@@ -1,0 +1,13 @@
+set pm3d map
+set size square
+set xrange[1:253]
+set yrange[1:253]
+#set palette defined (0 "black", 50 "blue", 100 "red", 200 "yellow", 250 "white")
+set palette defined (0 "white", 1.0 "blue")
+set cbrange [0.0 to 1.0]
+splot "energy_blocks1.txt" w pm3d
+set terminal postscript eps enhanced color lw 3 dl 3
+set output 'prova_blocks1.eps'
+replot
+exit
+
