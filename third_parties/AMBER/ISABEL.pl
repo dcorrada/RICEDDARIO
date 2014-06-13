@@ -26,6 +26,8 @@ use Carp;
 ## GLOBS ##
 our $workdir = getcwd();
 our $logfile = "$workdir/ISABEL.log";
+our $inputfiles = [ ];
+our $filter = 0;
 our %bins;
 ## SBLOG ##
 
@@ -45,6 +47,8 @@ ROGER
     ;
     print $splash;
     
+    use Getopt::Long;no warnings;
+    GetOptions('filter|f=i' => \$filter);
     unless ($ARGV[0]) {
         my $help = <<ROGER
 ISABEL is a Perl script which offers an automated pipeline for:
@@ -64,8 +68,7 @@ RICEDDARIO.
 
 ISABEL
 ├── PDB4AMBER 14.5.a (*)
-├── miniAMBER.fix 14.6.a (*)
-│   ├── AMBER 12 or higher
+├── AMBER 12 or higher
 │   └── AMBER Tools compliant version
 └── BRENDA 14.6.a (*)
     ├── BLOCKS 11.5 (*)
@@ -77,6 +80,9 @@ ISABEL
     \$ ISABEL.pl <protein.pdb>
 
     "protein.pdb"     the input structure, it must be correctly protonated
+    
+    -filter <integer>   number of contig residues for which interaction energy 
+                        will not considered (DEFAULT: 0)
 
 *** REFERENCES ***
 Please cite the following papers if you publish this work:
@@ -109,9 +115,11 @@ ROGER
     
     # cerco binari e script vari
     $bins{'PDB4AMBER'} = qx/which PDB4AMBER.pl/;
-    $bins{'MINIAMBER'} = qx/which miniAMBER.fix.pl/;
     $bins{'ANTEMMPBSA'} = qx/which ante-MMPBSA.py/;
     $bins{'MMPBSA'} = qx/which MMPBSA.py/;
+    $bins{'TLEAP'} = qx/which tleap/;
+    $bins{'SANDER'} = qx/which sander/;
+    $bins{'AMBPDB'} = qx/which ambpdb/;
     $bins{'BRENDA'} = qx/which BRENDA.pl/;
     
     foreach my $key (keys %bins) {
@@ -122,7 +130,12 @@ ROGER
 
 PDBCONVERSION: {
     message(sprintf("%s converting PDB to AMBER compliant format...", clock()));
+    
+    # input check from previous stage
     my $infile = $ARGV[0];
+    push(@{$inputfiles}, $infile);
+    check_inputs($inputfiles);
+    
     my $log = qx/$bins{'PDB4AMBER'} $infile 2>&1/;
     print ISALOG $log;
     
@@ -136,30 +149,80 @@ PDBCONVERSION: {
     print "done\n";
 }
 
-MDFAKE: {
-    # faccio una mini MD constrained giusto per avere un file mdcrd da dare in pasto a MMPBSA
-    message(sprintf("%s relaxing the structure...", clock()));
-    my $infile = "ISABELtmp.initial_structure.pdb";
-    my $log = qx/$bins{'MINIAMBER'} $infile 2>&1/;
+MINIMIZATION: {
+    message(sprintf("%s minimizing the structure...", clock()));
+    
+    my $infile1 = "$workdir/ISABELtmp.initial_structure.pdb";
+    my $infile2 = "$workdir/ISABELtmp.tleap.in";
+    my $infile3 = "$workdir/ISABELtmp.mini.in";
+    
+    # input check from previous stage
+    push(@{$inputfiles}, $infile1);
+    check_inputs($inputfiles);
+    
+    # topology script
+    my  $tleap_script = <<ROGER
+set default PBRadii mbondi2
+source leaprc.ff99SB
+REC = loadpdb $infile1
+check REC
+solvateOct REC TIP3PBOX 10.0
+addIons REC Na+ 0
+addIons REC Cl- 0
+saveamberparm REC ISABELtmp.prot.prmtop ISABELtmp.prot.inpcrd
+quit 
+ROGER
+    ;
+    open(INI, '>' . $infile2);
+    print INI $tleap_script;
+    close INI;
+    
+    # minimization script
+    my $ini_script = <<ROGER
+Minimisation: backbone w/ position restraints (120 kcal/molA)
+&cntrl
+ imin = 1,
+ maxcyc = 2000,
+ ncyc = 500,
+ ntb = 1,
+ ntr = 1,
+ restraint_wt = 120.0,
+ restraintmask = '\@N,CA,C,O,CB',
+ cut = 8.0
+&end
+
+ROGER
+    ;
+    open(INI, '>' . $infile3);
+    print INI $ini_script;
+    close INI;
+    
+    my $log;
+    # allestisco la topologia
+    $log = qx/$bins{'TLEAP'} -f $infile2/;
     print ISALOG $log;
+    # lancio la minimizzazione
+    $log = qx/$bins{'SANDER'} -O -i $infile3 -p ISABELtmp.prot.prmtop -c ISABELtmp.prot.inpcrd -ref ISABELtmp.prot.inpcrd -r ISABELtmp.prot.min.inpcrd -o ISABELtmp.prot.min.mdout/;
+    print ISALOG $log;
+    
     print "done\n";
 }
 
 MMGBSA: {
     message(sprintf("%s performing MM-GBSA calculation...", clock()));
     
-    # rimuovo tutta la fuffa creata nel blocco precedente
-    my $cleansweep = <<ROGER
-cd $workdir;
-cp TOPOLOGY/solv.rec.prmtop ./ISABELtmp.solv.prmtop;
-cp EQUILIBRATION/eq.npt.rec.mdcrd ./ISABELtmp.MD.mdcrd;
-rm -rf EQUILIBRATION HEATING MINIMIZATION TOPOLOGY;
-ROGER
-    ;
-    qx/$cleansweep/;
+    my $infile1 = "$workdir/ISABELtmp.prot.prmtop";
+    my $infile2 = "$workdir/ISABELtmp.prot.min.inpcrd";
+    my $infile3 = "$workdir/ISABELtmp.dry.prmtop";
+    my $infile4 = "$workdir/ISABELtmp.MMGBSA.in";
+    
+    # input check from previous stage
+    push(@{$inputfiles}, $infile1, $infile2);
+    check_inputs($inputfiles);
     
     # creo una topologia desolvatata della proteina
-    my $cmd = "$bins{'ANTEMMPBSA'} -p ISABELtmp.solv.prmtop -c ISABELtmp.dry.prmtop -s \":WAT,Cl-,Na+\"; ";
+    my $cmd = "$bins{'ANTEMMPBSA'} -p $infile1 -c $infile3 -s \":WAT,Cl-,Na+\"; ";
+    $cmd .=  "$bins{'AMBPDB'} -p $infile1 < $infile2 > ISABEL.minimized.pdb; ";
     
     # creo uno script di input per MMGBSA
     my $script = <<ROGER
@@ -178,12 +241,12 @@ Input file for GB calculation
 /
 ROGER
     ;
-    open(IN, '>' . "$workdir/ISABELtmp.MMGBSA.in");
+    open(IN, '>' . $infile4);
     print IN $script;
     close IN;
     
     # accodo il comando per lanciare MMPBSA
-    $cmd .= "$bins{'MMPBSA'} -O  -i ISABELtmp.MMGBSA.in -sp ISABELtmp.solv.prmtop -cp ISABELtmp.dry.prmtop -y ISABELtmp.MD.mdcrd";
+    $cmd .= "$bins{'MMPBSA'} -O  -i $infile4 -sp $infile1 -cp $infile3 -y $infile2";
     
     # lancio il calcolo
     my $log = qx/$cmd 2>&1/;
@@ -192,7 +255,12 @@ ROGER
 }
 
 BRENDA: {
-    message(sprintf("%s performing MM-GBSA calculation...", clock()));
+    message(sprintf("%s extracting energy determinants...", clock()));
+    
+    # input check from previous stage
+    my $infile = "$workdir/FINAL_DECOMP_MMPBSA.dat";
+    push(@{$inputfiles}, $infile);
+    check_inputs($inputfiles);
     
     # rinomino gli output di MMGBSA
     my $cleansweep = <<ROGER
@@ -203,14 +271,20 @@ ROGER
     ;
     qx/$cleansweep/;
     
-    my $log = qx/$bins{'BRENDA'} ISABEL.DECOMP_MMPBSA.dat 2>&1/;
+    my $log = qx/$bins{'BRENDA'} ISABEL.DECOMP_MMPBSA.dat -filter $filter 2>&1/;
     print ISALOG $log;
     print "done\n"
 }
 
 CLEANSWEEP: {
+    # input check from previous stage
+    my $infile = $ARGV[0];
+    push(@{$inputfiles}, $infile);
+    check_inputs($inputfiles);
+
     printf("%s cleaning intermediate files...", clock());
     qx/rm -rfv ISABELtmp.*/;
+    qx/rm -rfv leap.log mdinfo/;
 }
 
 FINE: {
@@ -235,4 +309,13 @@ sub message {
     my ($string) = @_;
     print $string;
     print ISALOG "\n\n*** $string ***\n\n";
+}
+
+sub check_inputs {
+    my ($input_list) = @_;
+    while (my $input = shift @{$input_list}) {
+        unless (-e $input) {
+            croak(sprintf("\nE- input file <$input> for this stage not found, pipeline aborted\n\t"));
+        }
+    }
 }
