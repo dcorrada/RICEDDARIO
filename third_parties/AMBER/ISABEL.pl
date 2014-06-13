@@ -77,9 +77,9 @@ ISABEL
 
 *** USAGE ***
 
-    \$ ISABEL.pl <protein.pdb>
+    \$ ISABEL.pl <protein.pdb> [-filter 4]
 
-    "protein.pdb"     the input structure, it must be correctly protonated
+    "protein.pdb"       the input structure, it must be correctly protonated
     
     -filter <integer>   number of contig residues for which interaction energy 
                         will not considered (DEFAULT: 0)
