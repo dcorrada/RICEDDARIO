@@ -440,7 +440,7 @@ sub getcpid {
 }
 
 sub init_database {
-    # status dei job ('queued', 'running' o 'finished')
+    # status dei job ('queued', 'running', 'finished', 'aborted')
     $dbobj->new_table(
         'dbh' => $dbh,
         'table' => 'status',
