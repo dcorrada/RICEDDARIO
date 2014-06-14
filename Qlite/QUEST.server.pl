@@ -41,7 +41,7 @@ our $socket; # oggetto IO::Socket::INET
 
 # DATABASE
 our $database = '/etc/QUEST.db'; # file del database
-our $db_obj; # oggetto RICEDDARIO::lib::SQLite
+our $dbobj; # oggetto RICEDDARIO::lib::SQLite
 our $dbh; # database handler
 our $sth; # statement handler
 
@@ -120,9 +120,9 @@ INIT: {
     close CONF;
     
     # inizializzo il database
-    $db_obj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
-    $dbh = $db_obj->access2db();
-    $sth = $db_obj->query_exec( 'dbh' => $dbh, 
+    $dbobj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
+    $dbh = $dbobj->access2db();
+    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
         'query' => 'SELECT name FROM sqlite_master WHERE type = "table"'
     );
     my $table_list = $sth->fetchall_arrayref();
@@ -136,7 +136,6 @@ INIT: {
     for (my $i = 0; $i < $confs{'threads'}; $i++) {
         my $thr = threads->new(\&superslot);
         $thr->detach();
-        $slotobj[$i] = $thr; # raccolgo l'oggetto 'threads' in un array
     }
     
     printf("%s server initialized\n\n", clock());
@@ -176,7 +175,72 @@ END
             } elsif ($recieved_data =~ /killer/ ) { # richiesta di uccidere job
                 $client->send("kill request");
             } elsif ($recieved_data =~ /user/ ) { # richiesta di sottomettere job
-                $client->send("submission request");
+                my @params = split(';', $recieved_data);
+                my %client_order;
+                while (my $order = shift @params) {
+                    my ($key, $value) = $order =~ /(.+)\|(.+)/;
+                    $client_order{$key} = $value;
+                }
+                
+                my $jobid;
+                my $isok = 1;
+                while ($isok) {
+                    # genero un jobid
+                    my @chars = ('A'..'Z', 0..9, 0..9);
+                    $jobid = join('', map $chars[rand @chars], 0..7);
+                    
+                    # mi assicuro che il jobid non sia già assegnato
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'SELECT * FROM status'
+                    );
+                    my $found;
+                    while (my $ref_row = $sth->fetchrow_hashref()) {
+                        my $value = $ref_row->{'jobid'};
+                        print "\t$value";
+                        $found = 1 if ($value eq $jobid);
+                    }
+                    $sth->finish();
+                    
+                    if ($found) {
+                        next; sleep 1;
+                    } else {
+                        undef $isok;
+                    }
+                }
+                
+                {   
+                    lock $dbaccess;
+                    
+                    # aggiungo i dettagli del job al DB
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'INSERT INTO details (jobid,threads,queue,user,schrodinger) VALUES (?,?,?,?,?)',
+                        'bindings' => [ $jobid, $client_order{'threads'}, $client_order{'queue'}, $client_order{'user'}, $client_order{'schrodinger'} ]
+                    );
+                    $sth->finish();
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'INSERT INTO paths (jobid,script,workdir) VALUES (?,?,?)',
+                        'bindings' => [ $jobid, $client_order{'script'}, $client_order{'workdir'} ]
+                    );
+                    $sth->finish();
+                    
+                    # accodo il job sul DB
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'INSERT INTO status (jobid,status) VALUES (?,"queued")',
+                        'bindings' => [ $jobid ]
+                    );
+                    $sth->finish();
+                    
+                    my $score = sprintf("%04d%s%012d-%s", $client_order{'threads'}, $client_order{'queue'}, time, $jobid);
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'INSERT INTO queuelist (jobid,score) VALUES (?,?)',
+                        'bindings' => [ $jobid, $score ]
+                    );
+                    $sth->finish();
+                }
+                
+                printf("%s job [%s] submitted\n", clock(), $jobid);
+                my $mess = sprintf("%s job [%s] submitted", clock(), $jobid);
+                $client->send($mess);
             } elsif ($recieved_data =~ /details/ ) { # richiesta di dettagli su di un job
                 $client->send("details request");
             } else {
@@ -199,10 +263,11 @@ FINE: {
 sub superslot {
     # accedo al database
     my $slotdbobj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
-    my $slotdbh = $db_obj->access2db();
+    my $slotdbh = $slotdbobj->access2db();
     my $slotsth;
         
     STANDBY: while (1) {
+        sleep 1;
         my $jobid;
         my $threads;
         
@@ -222,7 +287,7 @@ sub superslot {
             $slotsth->finish();
             
             # se non ci sono job accodati...
-            unless (%queued) { sleep 1; next STANDBY; };
+            unless (%queued) { next STANDBY; };
             
             # riordino la lista e prendo il primo
             my @sorted = sort {$a cmp $b} keys %queued;
@@ -238,7 +303,7 @@ sub superslot {
             $threads = $ref_row->{'threads'};
             
             # se non ci sono thread liberi...
-            if ($threads > ${$semaforo}) { sleep 1; next STANDBY; };
+            if ($threads > ${$semaforo}) { next STANDBY; };
             
             # rimuovo il job dalla queuelist se può partire
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
@@ -253,19 +318,19 @@ sub superslot {
         
         printf("%s job [%s] started\n", clock(), $jobid);
         
-        my ($workdir, $user, $script);
+        my ($workdir, $user, $script, $schrodinger);
         {
             lock $dbaccess;
-            
             # reperisco dettagli sul job
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
-                'query' => 'SELECT user, workdir, script FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
+                'query' => 'SELECT user, workdir, script, schrodinger FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
                 'bindings' => [ $jobid ]
             );
             my $ref_row = $slotsth->fetchrow_hashref();
             $workdir = $ref_row->{'workdir'};
             $user = $ref_row->{'user'};
             $script = $ref_row->{'script'};
+            $schrodinger = $ref_row->{'schrodinger'};
             $slotsth->finish();
             
             # aggiorno lo status del job
@@ -281,6 +346,51 @@ sub superslot {
         
         # lancio il job
         qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$script >> $logfile 2>&1"/;
+        
+        if ($schrodinger eq 'true') { # blocco ad-hoc per i job della Schrodinger
+            my $signature;
+        
+            # leggo il logfile per catturare il JobID assegnato da Schrodinger
+            my $waitforjobid = 1;
+            while ($waitforjobid) {
+                my $string = qx/grep "JobId:" $logfile/;
+                chomp $string;
+                if ($string) {
+                    ($signature) = $string =~ /JobId: (.+)/;
+                    undef $waitforjobid;
+                    # una volta che ottengo il JobID aspetto ancora un po' (se facessi partire subito un top cercando un processo contenente il JobID come stringa non troverei nulla)
+                    sleep 5;
+                } else {
+                    sleep 1; # continuo a ciclare fino a quando non ottengo un JobID
+                }
+            }
+            
+            {
+                lock $dbaccess;
+            
+                # aggiorno il database con il JobID
+                $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                    'query' => 'UPDATE details SET schrodinger = ? WHERE jobid = ?',
+                    'bindings' => [ $signature, $jobid ]
+                );
+                $slotsth->finish();
+            }
+            
+            # i job della Schrodinger fanno da se' un detach una volta partiti e lo script finirebbe, genero un loop che guarda se il monitor di Schrodinger controlla il JobID specifico
+            my $is_running = 1;
+            while ($is_running) {
+                my $pslog = qx/ps aux | grep "$signature"/;
+                my @procs = split("\n", $pslog);
+                @procs = grep(!/ps aux/, @procs);
+                @procs = grep(!/grep/, @procs);
+#                 print Dumper \@procs;
+                if (@procs) {
+                    sleep 5;
+                } else {
+                    undef $is_running;
+                }
+            }
+        }
         
         {
             lock $dbaccess;
@@ -331,33 +441,27 @@ sub getcpid {
 
 sub init_database {
     # status dei job ('queued', 'running' o 'finished')
-    $db_obj->new_table(
+    $dbobj->new_table(
         'dbh' => $dbh,
         'table' => 'status',
         'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `status` TEXT NOT NULL"
     );
     # scriptfile associati ai job
-    $db_obj->new_table(
+    $dbobj->new_table(
         'dbh' => $dbh,
         'table' => 'paths',
         'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `script` TEXT NOT NULL, `workdir` TEXT NOT NULL"
     );
     # parametri di sottomissione
-    $db_obj->new_table(
+    $dbobj->new_table(
         'dbh' => $dbh,
         'table' => 'details',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` TEXT NOT NULL, `user` TEXT NOT NULL, `subdate` TEXT NOT NULL" # la data va convertita con la funzione localtime
-    );
-    # parametri di running
-    $db_obj->new_table(
-        'dbh' => $dbh,
-        'table' => 'processes',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `pid` INT, `rundate` TEXT NOT NULL" # la data va convertita con la funzione localtime
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` TEXT NOT NULL, `user` TEXT NOT NULL, `schrodinger` TEXT NOT NULL"
     );
     # lista dei job accodati, score è un valore su cui si valuta la priorità dei job
-    $db_obj->new_table(
+    $dbobj->new_table(
         'dbh' => $dbh,
         'table' => 'queuelist',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL" # la data va convertita con la funzione localtime
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL"
     );
 }
