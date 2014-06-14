@@ -53,12 +53,10 @@ our $poweroff; # la variabile gestita dalla suboutine &sigIntHandler
 
 # THREADING
 our $semaforo; # semaforo basato per il blocco dei threads 
-our $dbaccess :shared; # accesso esclusivo al database
-our @slotstatus :shared; # stato degli slot
+our $dbaccess :shared; # serve per permettere ad un solo slot per volta di accedere al DB
 our @slotobj; # lista degli oggetti 'threads' lanciati (ie gli slot)
 
 # OTHERS
-our $superuser; # il server è stato lanciato come superuser?
 our $fileobj = RICEDDARIO::lib::FileIO->new(); # oggetto RICEDDARIO::lib::FileIO
 our @children; # elenco dei PID di processi figli di un job
 
@@ -82,19 +80,6 @@ END
 }
 
 INIT: {
-    
-    # verifico se sono root
-    my $username = $ENV{'USER'};
-    if ($username eq 'root') {
-        printf("%s access as superuser\n", clock());
-        $superuser = 1;
-    } else {
-        printf("%s access as <$username>\n", clock());
-        undef $superuser;
-        $conf_file = "$ENV{'HOME'}/.QUEST.conf";
-        $database = "$ENV{'HOME'}/.QUEST.db";
-    }
-    
     # verifico se esiste un file di configurazione
     unless (-e $conf_file) {
         my $ans;
@@ -149,10 +134,9 @@ INIT: {
     
     # lancio gli slot, il numero di slot aperti equivale al numero di threads (ie numero massimo di thread concorrenti)
     for (my $i = 0; $i < $confs{'threads'}; $i++) {
-        my $thr = threads->new(\&superslot, $i);
+        my $thr = threads->new(\&superslot);
         $thr->detach();
         $slotobj[$i] = $thr; # raccolgo l'oggetto 'threads' in un array
-#         printf("%s slot %d opened\n", clock(), $i);
     }
     
     printf("%s server initialized\n\n", clock());
@@ -207,24 +191,25 @@ END
 
 FINE: {
     close $socket if ($socket);
-    $dbh->disconnect;
+    $dbh->disconnect if $dbh;
     printf("%s server stopped\n\n", clock());
     exit;
 }
 
 sub superslot {
-    my ($slotid) = @_;
-    my ($jobid, $threads);
+    # accedo al database
     my $slotdbobj = RICEDDARIO::lib::SQLite->new('database' => $database, 'log' => 0);
-    
-    while (1) {
-        my $slotdbh = $db_obj->access2db();
-        my $slotsth;
+    my $slotdbh = $db_obj->access2db();
+    my $slotsth;
         
-        while (1) {
-            # con questo blocco la sub sta in standby fintanto che non trova un job disponibile a partire
+    STANDBY: while (1) {
+        my $jobid;
+        my $threads;
+        
+        { 
+            lock $dbaccess;
             
-            # estraggo il primo job dalla lista degli accodati
+            # leggo la lista dei job accodati
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
                 'query' => 'SELECT * FROM queuelist'
             );
@@ -236,64 +221,86 @@ sub superslot {
             }
             $slotsth->finish();
             
-            unless (%queued) { # non ci sono job accodati
-                sleep 1;
-                { lock @slotstatus; $slotstatus[$slotid] = 'empty'; }
-                next;
-            };
+            # se non ci sono job accodati...
+            unless (%queued) { sleep 1; next STANDBY; };
             
+            # riordino la lista e prendo il primo
             my @sorted = sort {$a cmp $b} keys %queued;
             $jobid = $queued{$sorted[0]};
             
             # verifico il numero di threads che richiede il job
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
-                'query' => 'SELECT jobid, threads FROM subdetails WHERE jobid = ?',
+                'query' => 'SELECT jobid, threads FROM details WHERE jobid = ?',
                 'bindings' => [ $jobid ]
             );
             my $ref_row = $slotsth->fetchrow_hashref();
             $slotsth->finish();
             $threads = $ref_row->{'threads'};
-            if ($threads > ${$semaforo}) {
-                sleep 1;
-                { lock @slotstatus; $slotstatus[$slotid] = 'standby'; }
-                next;
-            } else {
-                # rimuovo il job dalla queuelist se può partire
-                lock $dbaccess;
-                $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
-                    'query' => 'DELETE FROM queuelist WHERE jobid =?',
-                    'bindings' => [ $jobid ]
-                );
-                $slotsth->finish();
-                { lock @slotstatus; $slotstatus[$slotid] = 'busy'; }
-                last;
-            }
             
-        }
-        
-        my $start_time = time;
-        for (1..$threads) { $semaforo->down() }; # occupo tanti threads quanti richiesti
-        
-        {
-            # aggiorno il database
-            lock $dbaccess;
+            # se non ci sono thread liberi...
+            if ($threads > ${$semaforo}) { sleep 1; next STANDBY; };
+            
+            # rimuovo il job dalla queuelist se può partire
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
-                'query' => 'UPDATE jobstatus SET status = "running" WHERE jobid =?',
+                'query' => 'DELETE FROM queuelist WHERE jobid = ?',
                 'bindings' => [ $jobid ]
             );
             $slotsth->finish();
-            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
-                'query' => 'INSERT INTO runlist (jobid, rundate) VALUES (?, ?)',
-                'bindings' => [ $jobid,  $start_time ]
-            );
-            $sth->finish();
+            
+            # occupo tanti threads quanti richiesti
+            for (1..$threads) { $semaforo->down() };
         }
         
+        printf("%s job [%s] started\n", clock(), $jobid);
         
-        $slotdbh->disconnect;
+        my ($workdir, $user, $script);
+        {
+            lock $dbaccess;
+            
+            # reperisco dettagli sul job
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'SELECT user, workdir, script FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
+                'bindings' => [ $jobid ]
+            );
+            my $ref_row = $slotsth->fetchrow_hashref();
+            $workdir = $ref_row->{'workdir'};
+            $user = $ref_row->{'user'};
+            $script = $ref_row->{'script'};
+            $slotsth->finish();
+            
+            # aggiorno lo status del job
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'UPDATE status SET status = "running" WHERE jobid = ?',
+                'bindings' => [ $jobid ]
+            );
+            $slotsth->finish();
+        }
+        
+        # genero un file di log in cui raccogliero' l'output del job
+        my $logfile = sprintf("%s/QUEST.job.%s.log", $workdir, $jobid);
+        
+        # lancio il job
+        qx/cd $workdir; sudo -u $user touch $logfile; sudo su $user -c "$script >> $logfile 2>&1"/;
+        
+        {
+            lock $dbaccess;
+        
+            # aggiorno lo status del job
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'UPDATE status SET status = "finished" WHERE jobid = ?',
+                'bindings' => [ $jobid ]
+            );
+            $slotsth->finish();
+        
+            # libero tanti threads quanti richiesti
+            for (1..$threads) { $semaforo->up() }; 
+        }
+        
+        printf("%s job [%s] finished\n", clock(), $jobid);
     }
+    
+    $slotdbh->disconnect;
 }
-
 
 # questa subroutine serve per intercettare un segnale di interrupt
 sub sigIntHandler {
@@ -326,26 +333,26 @@ sub init_database {
     # status dei job ('queued', 'running' o 'finished')
     $db_obj->new_table(
         'dbh' => $dbh,
-        'table' => 'jobstatus',
+        'table' => 'status',
         'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `status` TEXT NOT NULL"
     );
     # scriptfile associati ai job
     $db_obj->new_table(
         'dbh' => $dbh,
-        'table' => 'jobfiles',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `filename` TEXT NOT NULL, `content` TEXT NOT NULL"
+        'table' => 'paths',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `script` TEXT NOT NULL, `workdir` TEXT NOT NULL"
     );
     # parametri di sottomissione
     $db_obj->new_table(
         'dbh' => $dbh,
-        'table' => 'subdetails',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` TEXT NOT NULL, `user` TEXT NOT NULL, `subdate` TEXT NOT NULL, `schrodinger` INT NOT NULL DEFAULT `0`" # la data va convertita con la funzione localtime
+        'table' => 'details',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `threads` INT NOT NULL, `queue` TEXT NOT NULL, `user` TEXT NOT NULL, `subdate` TEXT NOT NULL" # la data va convertita con la funzione localtime
     );
     # parametri di running
     $db_obj->new_table(
         'dbh' => $dbh,
-        'table' => 'runlist',
-        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `pid` INT, `schroid` TEXT, `rundate` TEXT NOT NULL" # la data va convertita con la funzione localtime
+        'table' => 'processes',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `pid` INT, `rundate` TEXT NOT NULL" # la data va convertita con la funzione localtime
     );
     # lista dei job accodati, score è un valore su cui si valuta la priorità dei job
     $db_obj->new_table(
