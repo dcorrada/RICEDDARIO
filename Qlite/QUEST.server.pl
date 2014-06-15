@@ -347,74 +347,77 @@ END
                 $sth->finish();
                 unless ($ref_row->{'user'}) {
                     $mess = "REJECTED: unable to find job [$jobid]\n";
+                    goto ENDKILL;
                 } elsif ($ref_row->{'user'} ne $user) {
                     $mess = "REJECTED: $user is not the owner of this job\n";
-                } else {
-                    # verifico se il job sta girando oppure se è accodato
+                    goto ENDKILL;
+                }
+                # verifico se il job sta girando oppure se è accodato
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'SELECT status FROM status WHERE jobid = ?',
+                    'bindings' => [ $jobid ]
+                );
+                $ref_row = $sth->fetchrow_hashref();
+                $sth->finish();
+                if ($ref_row->{'status'} eq 'queued') {
+                    # se il job è accodato lo rimuovo dalla lista
+                    lock $dbaccess;
                     $sth = $dbobj->query_exec( 'dbh' => $dbh, 
-                        'query' => 'SELECT status FROM status WHERE jobid = ?',
+                        'query' => 'DELETE FROM queuelist WHERE jobid = ?',
+                        'bindings' => [ $jobid ]
+                    );
+                    $sth->finish();
+                } elsif ($ref_row->{'status'} eq 'running') {
+                    # il job sta girando, verifico i dettagli
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'SELECT script,schrodinger FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
                         'bindings' => [ $jobid ]
                     );
                     $ref_row = $sth->fetchrow_hashref();
                     $sth->finish();
-                    if ($ref_row->{'status'} eq 'queued') {
-                        # se il job è accodato lo rimuovo dalla lista
-                        lock $dbaccess;
-                        $sth = $dbobj->query_exec( 'dbh' => $dbh, 
-                            'query' => 'DELETE FROM queuelist WHERE jobid = ?',
-                            'bindings' => [ $jobid ]
-                        );
-                        $sth->finish();
-                    } elsif ($ref_row->{'status'} eq 'running') {
-                        # il job sta girando, verifico i dettagli
-                        $sth = $dbobj->query_exec( 'dbh' => $dbh, 
-                            'query' => 'SELECT script,schrodinger FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
-                            'bindings' => [ $jobid ]
-                        );
-                        $ref_row = $sth->fetchrow_hashref();
-                        $sth->finish();
-                        
-                        if ($ref_row->{'schrodinger'} !~ /false/) {
-                            # è un job Schrodinger, non lo uccido direttamente
-                            $mess = <<END
+                    
+                    if ($ref_row->{'schrodinger'} !~ /false/) {
+                        # è un job Schrodinger, non lo uccido direttamente
+                        $mess = <<END
 REJECTED: try to use the following commad
 
     \$ \$SCHRODINGER/jobcontrol -kill $ref_row->{'schrodinger'}
 END
-                            ;
-                        } else {
-                            # è un job normale, provo ad ucciderlo
-                            my $string = "QUEST.job.$jobid.log";
-                            my $psaux = qx/ps aux \| grep -P " $ref_row->{'script'} >> .*$string"/;
-                            my @procs = split("\n", $psaux);
-                            my ($match) = grep(!/grep/, @procs);
-                            my ($parent_pid) = $match =~ /\w+\s*(\d+)/;
-                            undef @children;
-                            push (@children, $parent_pid);
-                            &getcpid($parent_pid);
-                            @children = sort {$b <=> $a} @children;
-                            while (my $child = shift(@children)) {
+                        ;
+                        goto ENDKILL;
+                    } else {
+                        # è un job normale, provo ad ucciderlo
+                        my $string = "QUEST.job.$jobid.log";
+                        my $psaux = qx/ps aux \| grep -P " $ref_row->{'script'} >> .*$string"/;
+                        my @procs = split("\n", $psaux);
+                        my ($match) = grep(!/grep/, @procs);
+                        my ($parent_pid) = $match =~ /\w+\s*(\d+)/;
+                        undef @children;
+                        push (@children, $parent_pid);
+                        &getcpid($parent_pid);
+                        @children = sort {$b <=> $a} @children;
+                        while (my $child = shift(@children)) {
 #                                 print "\tkilling child pid $child...\n";
-                                kill 15, $child;
-                                sleep 1; # aspetto un poco...
-                            }
+                            kill 15, $child;
+                            sleep 1; # aspetto un poco...
                         }
                     }
-                    
-                    # aggiorno il database
-                    {
-                        lock $dbaccess;
-                        $sth = $dbobj->query_exec( 'dbh' => $dbh, 
-                            'query' => 'UPDATE status SET status = "aborted" WHERE jobid = ?',
-                            'bindings' => [ $jobid ]
-                        );
-                        $sth->finish();
-                    }
-                    
-                    printf("%s job [%s] aborted\n", clock(), $jobid);
-                    $mess = "job [$jobid] killed\n";
                 }
-                $client->send($mess);
+                
+                # aggiorno il database
+                {
+                    lock $dbaccess;
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'UPDATE status SET status = "aborted" WHERE jobid = ?',
+                        'bindings' => [ $jobid ]
+                    );
+                    $sth->finish();
+                }
+                
+                printf("%s job [%s] aborted\n", clock(), $jobid);
+                $mess = "job [$jobid] killed\n";
+                
+                ENDKILL: { $client->send($mess) };
             }
             
             # messaggio di "passo e chiudo" dal server al client
