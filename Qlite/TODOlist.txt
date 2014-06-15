@@ -1,7 +1,0 @@
-* il server dovrà essere lanciato SOLO come root
-
-* gestire il riavvio del server: reinizializzare la tabella 'queuelist' riaccodando ex-novo i job flaggati come 'running' o 'queued' nella tabella status
-
-* i job killati vanno tolti dalla tabella 'queuelist' (se accodati), il jobid viene flaggato come 'aborted' nella tabella 'status'
-
-* mettere un print "assigning jobid..." per ogni ciclo in cui viene fatto un check sul jobid alla sottomissione

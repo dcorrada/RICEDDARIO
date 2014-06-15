@@ -80,6 +80,11 @@ END
 }
 
 INIT: {
+    my $username = $ENV{'USER'};
+    unless ($username eq 'root') {
+        croak "E- you must have superuser privileges to run the server\n\t";
+    };
+    
     # verifico se esiste un file di configurazione
     unless (-e $conf_file) {
         my $ans;
@@ -104,6 +109,9 @@ INIT: {
         print "\n";
     }
     
+    print "    CONFIGS...: $conf_file\n";
+    print "    DATABASE..: $database\n\n";
+    
     # inizializzo il server leggendo il file di configurazione
     open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
     while (my $newline = <CONF>) {
@@ -127,7 +135,11 @@ INIT: {
     );
     my $table_list = $sth->fetchall_arrayref();
     $sth->finish();
-    init_database() if (scalar @{$table_list} == 0);
+    if (scalar @{$table_list} == 0) {
+        init_database();
+    } else {
+        rescue_database();
+    }
     
     # inizializzo il semaforo
     $semaforo = Thread::Semaphore->new(int($confs{'threads'}));
@@ -138,9 +150,7 @@ INIT: {
         $thr->detach();
     }
     
-    printf("%s server initialized\n\n", clock());
-    print "    CONFIGS...: $conf_file\n";
-    print "    DATABASE..: $database\n\n";
+    printf("%s server initialized\n", clock());
 }
 
 CORE: {
@@ -170,11 +180,12 @@ END
             my $recieved_data;
             $client->recv($recieved_data,1024);
             
-            if ($recieved_data eq 'status') { # richiesta della lista dei job
-                $client->send("status request");
-            } elsif ($recieved_data =~ /killer/ ) { # richiesta di uccidere job
+            if ($recieved_data =~ /killer/ ) { # richiesta di uccidere job
                 $client->send("kill request");
-            } elsif ($recieved_data =~ /user/ ) { # richiesta di sottomettere job
+                
+                
+# *** JOB SUBMISSION ***
+            } elsif ($recieved_data =~ /user/ ) {
                 my @params = split(';', $recieved_data);
                 my %client_order;
                 while (my $order = shift @params) {
@@ -185,6 +196,8 @@ END
                 my $jobid;
                 my $isok = 1;
                 while ($isok) {
+                    $client->send("assigning jobid...\n");
+                    
                     # genero un jobid
                     my @chars = ('A'..'Z', 0..9, 0..9);
                     $jobid = join('', map $chars[rand @chars], 0..7);
@@ -196,7 +209,7 @@ END
                     my $found;
                     while (my $ref_row = $sth->fetchrow_hashref()) {
                         my $value = $ref_row->{'jobid'};
-                        print "\t$value";
+#                         print "\t$value";
                         $found = 1 if ($value eq $jobid);
                     }
                     $sth->finish();
@@ -241,8 +254,83 @@ END
                 printf("%s job [%s] submitted\n", clock(), $jobid);
                 my $mess = sprintf("%s job [%s] submitted", clock(), $jobid);
                 $client->send($mess);
-            } elsif ($recieved_data =~ /details/ ) { # richiesta di dettagli su di un job
-                $client->send("details request");
+                
+                
+# *** JOB LIST ***
+            } elsif ($recieved_data =~ /status/ ) {
+                my (%running, %queued);
+                
+                # leggo quali job sono attivi
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'SELECT * FROM status'
+                );
+                while (my $ref_row = $sth->fetchrow_hashref()) {
+                    if ($ref_row->{'status'} eq 'running') {
+                        $running{$ref_row->{'jobid'}} = '';
+                    } elsif ($ref_row->{'status'} eq 'queued') {
+                        $queued{$ref_row->{'jobid'}} = '';
+                    } else {
+                        next;
+                    }
+                }
+                $sth->finish();
+                
+                # raccolgo i dettagli
+                foreach my $jobid (keys %running) {
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'SELECT user, threads, queue, script FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
+                        'bindings' => [ $jobid ]
+                    );
+                    my $ref_row = $sth->fetchrow_hashref();
+                    $sth->finish();
+                    $running{$jobid} = sprintf( "[%s]  %s  %s  %s  <%s>",
+                        $jobid,
+                        $ref_row->{'user'},
+                        $ref_row->{'threads'},
+                        $ref_row->{'queue'},
+                        $ref_row->{'script'}
+                    );
+                }
+                foreach my $jobid (keys %queued) {
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'SELECT user, threads, queue, script FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
+                        'bindings' => [ $jobid ]
+                    );
+                    my $ref_row = $sth->fetchrow_hashref();
+                    $sth->finish();
+                    $queued{$jobid} = sprintf( "[%s]  %s  %s  %s  <%s>",
+                        $jobid,
+                        $ref_row->{'user'},
+                        $ref_row->{'threads'},
+                        $ref_row->{'queue'},
+                        $ref_row->{'script'}
+                    );
+                }
+                
+                # riordino i job accodati secondo lo score
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'SELECT * FROM queuelist'
+                );
+                my %scored;
+                while (my $ref_row = $sth->fetchrow_hashref()) {
+                    my $key = $ref_row->{'score'};
+                    my $value = $ref_row->{'jobid'};
+                    $scored{$key} = $value;
+                }
+                $sth->finish();
+                my @sorted = sort {$a cmp $b} keys %scored;
+                
+                my $log;
+                $log = sprintf("\nAvalaible threads %d of %d\n", ${$semaforo}, $confs{'threads'});
+                $log .= "\n--- JOB RUNNING ---\n";
+                foreach my $jobid (keys %running) {
+                    $log .= sprintf("%s\n", $running{$jobid});
+                }
+                $log .= "\n--- JOB QUEUED ---\n";
+                foreach my $score (@sorted) {
+                    $log .= sprintf("%s\n", $queued{$scored{$score}});
+                }
+                $client->send($log);
             } else {
                 next;
             }
@@ -464,4 +552,70 @@ sub init_database {
         'table' => 'queuelist',
         'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL"
     );
+}
+
+sub rescue_database {
+    # re-inizializzo la queuelist
+    $dbobj->new_table(
+        'dbh' => $dbh,
+        'table' => 'queuelist',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL"
+    );
+    
+    # leggo lo status dei job prima che il server fosse stoppato
+    my @alive;
+    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+        'query' => 'SELECT * FROM status'
+    );
+    while (my $ref_row = $sth->fetchrow_hashref()) {
+        if ($ref_row->{'status'} =~ /(queued|running)/) {
+            push(@alive, $ref_row->{'jobid'});
+#             print "[$ref_row->{'jobid'} -> $ref_row->{'status'}]\n";
+        }
+    }
+    $sth->finish();
+    
+    if (scalar @alive > 0) {
+        printf("\n%d jobs were interrupted last time, do you want to restore them? [y/N] ", scalar @alive);
+        my $ans = <STDIN>; chomp $ans;
+        $ans = 'n' unless ($ans);
+        if ($ans =~ /[nN]/) {
+            foreach my $jobid (@alive) {
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'UPDATE status SET status = "aborted" WHERE jobid = ?',
+                    'bindings' => [ $jobid ]
+                );
+                $sth->finish();
+            }
+        } else {
+            foreach my $jobid (@alive) {
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'UPDATE status SET status = "queued" WHERE jobid = ?',
+                    'bindings' => [ $jobid ]
+                );
+                $sth->finish();
+                
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'SELECT threads, queue FROM details WHERE jobid = ?',
+                    'bindings' => [ $jobid ]
+                );
+                my $ref_row = $sth->fetchrow_hashref();
+                $sth->finish();
+                
+                my $newscore = sprintf("%04d%s%012d-%s", $ref_row->{'threads'}, $ref_row->{'queue'}, time, $jobid);
+                
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'INSERT INTO queuelist (jobid,score) VALUES (?,?)',
+                    'bindings' => [ $jobid, $newscore ]
+                );
+                $sth->finish();
+                
+                printf("%s job [%s] restored\n", clock(), $jobid);
+                
+                sleep 1;
+            }
+        }
+    }
+
+    
 }
