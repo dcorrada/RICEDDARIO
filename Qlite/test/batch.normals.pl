@@ -4,6 +4,7 @@
 use strict;
 use warnings;
 
+my $bin = qx/which QUEST.client.pl/; chomp $bin;
 
 foreach (1..2000) {
     sleep 1;

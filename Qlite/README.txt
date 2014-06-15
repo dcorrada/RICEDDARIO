@@ -15,7 +15,7 @@ Here are simple steps to install DBI module on your Linux/UNIX machine:
 
 If you need to install SQLite driver for DBI, then it can be installed as follows:
 
-    $ wget http://bo.mirror.garr.it/mirrors/CPAN//authors/id/I/IS/ISHIGAKI/DBD-SQLite-1.42.tar.gz
+    $ wget http://bo.mirror.garr.it/mirrors/CPAN/authors/id/I/IS/ISHIGAKI/DBD-SQLite-1.42.tar.gz
     $ tar xvfz DBD-SQLite-1.42.tar.gz
     $ cd DBD-SQLite-1.42
     $ perl Makefile.PL

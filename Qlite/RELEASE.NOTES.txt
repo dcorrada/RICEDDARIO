@@ -1,3 +1,9 @@
+*** release 14.6.a ***
+
+* INTERNALS: the server has been completely re-written. The job control is based on a SQLite database and the number of concurrent threads launched is constant (it depends on the number of threads setted in the conf file). As a consequence this version has no limit about the overall number of jobs submitted. Nevertheless, in order to use this version you will need to install the additional Perl libraries "DBI" and "DBD::SQLite".
+
+* RECOVERING: if the server has been stopped while some jobs are still running and/or queued, these jobs can be automatically restarted on the next launch of the server.
+
 *** release 14.5.d ***
 
 * JOB LIST: added queue types (fast|slow) to job priority
