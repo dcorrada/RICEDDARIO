@@ -13,9 +13,13 @@ REMEMBER to read...
 - AMB2GMX: new release (14.6.a)
 - miniAMBER.fix: alternative version of <miniAMBER.pl> with constrained workflow
 - miniAMBER: minor bugfix
-- QUEST: bugfix related to managing the queue list
+- QUEST: new release (14.6.a)
 - ISABEL: new release (14.6.a)
 - BRENDA: new release (14.6.a)
+
+#### NUOVA PAGINA WIKI PER QUEST #######################################
+Già pronta nel file Qlite/README.txt
+################################################################################
 
 #### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
 Fare una pagina wiki in cui discutere di ISABEL e BRENDA assieme, dal momento che BRENDA è il core program e ISABEL è diventato un wrapper che richiama BRENDA
