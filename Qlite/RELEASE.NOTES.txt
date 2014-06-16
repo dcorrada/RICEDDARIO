@@ -4,6 +4,8 @@
 
 * RECOVERING: if the server has been stopped while some jobs are still running and/or queued, these jobs can be automatically restarted on the next launch of the server.
 
+* CLIENT OPTIONS: '-d' option for visualizing details about a job.
+
 *** release 14.5.d ***
 
 * JOB LIST: added queue types (fast|slow) to job priority

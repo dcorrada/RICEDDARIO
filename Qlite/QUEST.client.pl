@@ -50,7 +50,7 @@ END
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s', 'schrodinger|s', 'queue|q=s' );
+    GetOptions($options, 'help|h', 'list|l','threads|n=i', 'killer|k=s', 'schrodinger|s', 'queue|q=s', 'details|d=s' );
     my $usage = <<END
 SYNOPSYS
 
@@ -68,6 +68,8 @@ OPTIONS
   -l                    list of jobs running/queued
 
   -k <jobid>            kill a job
+
+  -d <jobid>            details of a job
 
   -s                    specify that the job comes from Schrondinger Suite, 
                         please read the README.txt file in order to write a 
@@ -101,7 +103,7 @@ INIT: {
     close CONF;
 
     # configurazione delle opzioni
-    unless ($ARGV[0] || exists $options->{'list'} || exists $options->{'killer'}) {
+    unless ($ARGV[0] || exists $options->{'list'} || exists $options->{'killer'} || exists $options->{'details'}) {
         print "\nNothing to do";
         goto FINE;
     }
@@ -151,6 +153,12 @@ CORE: {
         $mess = sprintf("%s|%s;%s|%s", 
             'killer',   $options->{'killer'}, 
             'user',     $options->{'user'}
+        );
+    
+    # dettagli su di un job
+    } elsif (exists $options->{'details'}) {
+        $mess = sprintf("%s|%s", 
+            'details',   $options->{'details'}
         );
     
     # sottometto un job

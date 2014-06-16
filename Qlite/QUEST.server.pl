@@ -247,6 +247,13 @@ END
                         'bindings' => [ $jobid, $score ]
                     );
                     $sth->finish();
+                    
+                    my $timex = clock();
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'INSERT INTO timex (jobid, submit)VALUES (?,?)',
+                        'bindings' => [ $jobid, $timex ]
+                    );
+                    $sth->finish();
                 }
                 
                 printf("%s job [%s] submitted\n", clock(), $jobid);
@@ -330,6 +337,50 @@ END
                     $log .= sprintf("%s\n", $queued{$scored{$score}});
                 }
                 $client->send($log);
+                
+# ******************************************************************************
+# *** RICHIESTA DI DETTAGLI SU DI un JOB ***************************************
+# ******************************************************************************
+            } elsif ($recieved_data =~ /details/ ) {
+                my ($jobid) = $recieved_data =~ /details\|([\w\d]+)/;
+                my $mess;
+                
+                # leggo i dettagli sul job
+                $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                    'query' => 'SELECT user, threads, queue, schrodinger, script script FROM details INNER JOIN paths ON details.jobid = paths.jobid WHERE details.jobid = ?',
+                    'bindings' => [ $jobid ]
+                );
+                my $details = $sth->fetchrow_hashref();
+                $sth->finish();
+                
+                unless ($details->{'user'}) {
+                    $mess = "unable to find job [$jobid]\n";
+                } else {
+                    # prendo i tempi del job
+                    $sth = $dbobj->query_exec( 'dbh' => $dbh, 
+                        'query' => 'SELECT status, submit, start, stop FROM status INNER JOIN timex ON status.jobid = timex.jobid WHERE status.jobid = ?',
+                        'bindings' => [ $jobid ]
+                    );
+                    my $timex = $sth->fetchrow_hashref();
+                    $sth->finish();
+                    
+                    $mess = <<END
+*** JOB $jobid ***
+STATUS........: $timex->{'status'}
+USER..........: $details->{'user'}
+THREADS.......: $details->{'threads'}
+QUEUE.........: $details->{'queue'}
+SCHRODINGER...: $details->{'schrodinger'}
+SCRIPT........: $details->{'script'}
+SUBMITTED.....: $timex->{'submit'}
+STARTED.......: $timex->{'start'}
+FINISHED......: $timex->{'stop'}
+
+END
+                    ;
+                }
+                
+                $client->send($mess);
                 
 # ******************************************************************************
 # *** RICHIESTA DI ABORTIRE UN JOB SOTTOMESSO **********************************
@@ -512,6 +563,13 @@ sub superslot {
                 'bindings' => [ $jobid ]
             );
             $slotsth->finish();
+            
+            my $timex = clock();
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'UPDATE timex SET start = ? WHERE jobid = ?',
+                'bindings' => [ $timex, $jobid ]
+            );
+            $slotsth->finish();
         }
         
         # genero un file di log in cui raccogliero' l'output del job
@@ -572,6 +630,13 @@ sub superslot {
             $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
                 'query' => 'UPDATE status SET status = "finished" WHERE jobid = ?',
                 'bindings' => [ $jobid ]
+            );
+            $slotsth->finish();
+            
+            my $timex = clock();
+            $slotsth = $slotdbobj->query_exec( 'dbh' => $slotdbh, 
+                'query' => 'UPDATE timex SET stop = ? WHERE jobid = ?',
+                'bindings' => [ $timex, $jobid ]
             );
             $slotsth->finish();
         
@@ -636,6 +701,13 @@ sub init_database {
         'dbh' => $dbh,
         'table' => 'queuelist',
         'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `score` TEXT NOT NULL"
+    );
+    
+    # lista dei job accodati, score è un valore su cui si valuta la priorità dei job
+    $dbobj->new_table(
+        'dbh' => $dbh,
+        'table' => 'timex',
+        'args' => "`jobid` TEXT PRIMARY KEY NOT NULL, `submit` TEXT NOT NULL DEFAULT 'null', `start` TEXT NOT NULL DEFAULT 'null', `stop` TEXT NOT NULL DEFAULT 'null'"
     );
 }
 
