@@ -50,25 +50,6 @@ Server can be stopped by press `CTRL+C`:
 
     [2014/06/16 10:58:41] QUEST server stopped
 
-### 2. 1. Launch the server as a daemon
-
-You can launch the server at boot and redirect the standard output to a log file:
-
-    $ sudo su
-    $ touch /var/log/QUEST.server.log
-    $ vim /etc/init.d/QUEST.server.sh
-
-The file _/etc/init.d/QUEST.server.sh_ is a simple bash script like the following:
-
-    #!/bin/sh
-    
-    export USER=root
-    nice -n 19 /usr/local/RICEDDARIO/QUEST/QUEST.server.pl > /var/log/QUEST.server.log &
-    
-Finally register your script:
-
-    $ cd /etc/init.d
-    $ update-rc.d QUEST.server.sh defaults
 
 ## 3. SUBMITTING JOBS
 The client script should be launched as local user. To submit a job just simply type:

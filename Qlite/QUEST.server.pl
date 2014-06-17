@@ -21,7 +21,6 @@ use lib $ENV{HOME};
 use Data::Dumper;
 ###################################################################
 use RICEDDARIO::lib::SQLite;
-use RICEDDARIO::lib::FileIO;
 use Carp;
 use IO::Socket::INET;
 use threads;
@@ -57,7 +56,6 @@ our $dbaccess :shared; # serve per permettere ad un solo slot per volta di acced
 our @slotobj; # lista degli oggetti 'threads' lanciati (ie gli slot)
 
 # OTHERS
-our $fileobj = RICEDDARIO::lib::FileIO->new(); # oggetto RICEDDARIO::lib::FileIO
 our @children; # elenco dei PID di processi figli di un job
 
 ## SBLOG ##
