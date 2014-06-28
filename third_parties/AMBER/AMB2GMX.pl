@@ -1,15 +1,14 @@
 #!/usr/bin/perl
 
-
 # CHANGELOG
+# release 14.6.a                - support for cpptraj
 #
 # release 14.5.b                - interactive mode for options confirmation
-# (at RICEDDARIO 14.6)          - paths for GROMACS commands
+#                               - paths for GROMACS commands
 #                               - USAGE block removed
 #                               - selecting groups from index file
 #
 # release 14.5.a                - initial release
-# (at RICEDDARIO 14.5)
 
 
 use strict;
@@ -58,13 +57,14 @@ our $options = {
 };
 our @thr;
 our $selected;
+our $is_cpptraj;
 ## SBLOG ##
 
 INIT: {
     my $splash = <<END
 ********************************************************************************
 AMB2GMX
-release 14.5.b
+release 14.6.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -92,6 +92,19 @@ END
     ;
     print $splash;
     
+    # verifico quale ptraj usare
+    chomp $bins->{'ptraj'};
+    unless (-e $bins->{'ptraj'}) {
+        print "\n\nptraj is not available, should I look for cpptraj? [Y/n] ";
+        my $ans = <STDIN>;
+        chomp $ans;
+        $ans = 'y' unless ($ans);
+        if ($ans =~ /[Yy]/) {
+            $bins->{'ptraj'} = $AMBERHOME . "/bin/cpptraj\n";
+            $is_cpptraj = 1;
+        }
+    }
+
     # verifico che i binari ci siano tutti
     foreach my $key (keys %{$bins}) {
         chomp $bins->{$key};
@@ -178,6 +191,8 @@ END
     system("$bins->{'ptraj'} $inputs->{'prmtop'} ptraj_full.in");
 }
 
+goto NDX if ($is_cpptraj);
+
 RENAME: {
     printf("\n*** %s renaming pdb snapshots ***\n\n", clock());
     opendir(OUTS, $workdir);
@@ -225,6 +240,8 @@ NDX: {
     ($selected) = $newgroup =~ /^\s*(\d+)/;
 }
 
+goto CPPTRAJ if ($is_cpptraj);
+
 TRJCONV: {
     printf("\n*** %s running trjconv ***\n\n", clock());
     opendir(OUTS, $workdir);
@@ -256,6 +273,12 @@ TRJCAT: {
     system("echo $selected | $bins->{'trjconv'} -f $options->{'filename'}.start.xtc -s $options->{'filename'}.gro -timestep $options->{'skip'} -o $options->{'filename'}.xtc -n index.ndx");
 }
 
+CPPTRAJ: {
+    printf("\n*** %s running trjconv ***\n\n", clock());
+    system("echo $selected | $bins->{'editconf'} -f mdcrd_0.pdb -o $options->{'filename'}.gro -n index.ndx");
+    system("echo $selected | $bins->{'trjconv'} -f mdcrd.pdb -s $options->{'filename'}.gro -timestep $options->{'skip'} -o $options->{'filename'}.xtc -n index.ndx");
+}
+
 CLEANSWEEP: {
     printf("\n*** %s cleaning temporary files ***\n\n", clock());
     my $cmd = <<END
@@ -267,6 +290,15 @@ rm index.ndx
 rm \\#*
 END
     ;
+    if ($is_cpptraj) {
+        $cmd = <<END
+rm *.pdb
+rm ptraj_*.in
+rm index.ndx
+rm \\#*
+END
+        ;
+    }
     qx/$cmd/;
 }
 

@@ -1,6 +1,6 @@
 # WARNING: this is a template of a sander script, please copy the following text WITHOUT comments. 
 
-# /usr/bin/mpirun -np 4 $AMBERHOME/bin/pmemd.MPI -O -i MD.in -p box.prmtop -c equilibrated.rst7 -r MD.rst7 -o MD.mdout -x MD.mdcrd -e MD.mden
+# /usr/bin/mpirun -np 4 $AMBERHOME/bin/pmemd.MPI -O -i MD.in -p box.prmtop -c equilibrated.rst7 -r MD.rst7 -o MD.mdout -x MD.nc -e MD.mden
 
 # the first line is the header (title) of the script
 NPT MD w/o position restraints and PME (5 ns)
@@ -16,13 +16,14 @@ NPT MD w/o position restraints and PME (5 ns)
 # INPUTS
  ntx = 5,               # coordinates and velocities will be read from formatted input file
  irest = 1,             # MD will be restarted from a restart (rst7) file
+ ntxo = 2,              # format of final coordinates (1, ASCII formatted; 2, NetCDF binary)
 
 # OUTPUTS: at what frequency (steps) outputs will be written (0, disabled)
  ntpr = 2000,           # summaries at mdout file
  ntwx = 500,            # coordinates
  ntwe = 2000,           # energies
  ntwr = 25000,          # overwriting the restart file (as GMX checkpoint)
- ioutfm = 0,            # trajectory files format(0, ASCII formatted; 1, NetCDF binary)
+ ioutfm = 1,            # trajectory files format(0, ASCII formatted; 1, NetCDF binary)
  ntwprt = 0,            # atoms included in trajectory (0, all atoms)
 
 # MD calculations
@@ -55,6 +56,7 @@ NPT MD w/o position restraints and PME (5 ns)
  nsnb = 25,           # frequency of nonbonded list updates
  ipol = 0,            # no polarizable force field is applied
  igb = 0              # no implicit solvent model is applied
+ nrespa = 1,          # adjusting forces every nrespa*dt (tuning this value can speedup calculations, on the other hand if nrespa*dt > 4fs the simulation become less stable)
 
 # namelist is concluded by an "&end" token.
 &end

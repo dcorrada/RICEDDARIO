@@ -1,0 +1,16 @@
+MM-GBSA w Energy Decomposition Analysis
+&general
+ verbose = 2,           # print to output bonded terms (if trajectory is used)
+ startframe = 1000,     # starting frame to read (if trajectory is used)
+ interval = 10,         # offset for choosing timeframes (if trajectory is used)
+ keep_files = 0,        # keep temporary files
+ entropy = 0,           # calculate conformational entropy with quasi-harmonic approximation (0 = disabled)
+ netcdf = 1,             # create temporary NetCDF trajectory for internal use (incompatible with alanine scanning protocols)
+/
+&gb
+ igb = 5,               # Generalized Born Method
+/
+&decomp
+ dec_verbose = 2,       # print Complex, Receptor, Ligand, and DELTA energies, total contribution only
+ idecomp = 3,           # pairwise decomp with 1-4 terms added to internal potential terms
+/

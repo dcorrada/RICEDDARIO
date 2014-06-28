@@ -1,0 +1,53 @@
+*** STEP 01: PREPARE INPUT SCRIPT FILE ***
+The <blocks.inp> file is an input script file in which different parameters are 
+passed to the BLOCKS program:
+
+    NRES        total number of eigenvectors.
+    
+    FRACT       threshold for considering the eigenvectors (Recommended: 0.6). 
+                FRACT=0.6 means that we select only  eigenvectors whose 
+                eigenvalue is, in absolute value,greater than or equal to 
+                0.6*abs(eigval(1)) where eigval(1) is the lowest eigenvalue.
+    
+    TOTAL       logical variable to indicate if considering NRES eigenvectors 
+                (total=.true.) or only the selected ones (logical=.false.) in 
+                the computation of the median for the binary discretization.
+    
+    NTM         maximum number of times that a component can be covered 
+                (Recommended: 3).
+    
+    PERCOMP     maximum fraction of the total number of components that can be 
+                covered NTM times (Recommended: 0.5).
+    
+    NGRAIN      side-length of the starting diagonal tesserae in the first step.
+    
+    LENGTH      minimal domain dimensions.
+
+The parameters list must be flanked by "$PARAMS" and "$END" flags. A typical 
+input script file will contain a line like this:
+    
+    $PARAMS  NRES=309 FRACT=0.6d0 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 \
+    LENGTH=50 $END
+
+
+*** STEP 02: PRODUCTION RUN ***
+You need to have three input files with the exactly filename as follows:
+
+    fort.30     eigenvectors of the non-bonded interaction energy matrix
+    
+    fort.31     eigenvalues of the non-bonded interaction energy matrix
+    
+    fort.35     contact-matrix for furhter refinement of the domain-subdivision
+
+Copy the input templates and run the program:
+    
+    $ ../BLOCKS.64bit < ./blocks.inp > ./blocks.out
+    
+BLOCKS will produce three additional output file (other than the normal STDOUT 
+redirected to the file blocks.out):
+
+    fort.32     selected eigenvectors
+    
+    fort.33     non-bonded interaction energy matrix in gnuplot format
+    
+    fort.34     non-bonded interaction energy matrix in gnuplot format
