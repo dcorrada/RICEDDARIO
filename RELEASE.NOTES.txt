@@ -7,8 +7,15 @@ REMEMBER to read...
 
 ...before merging to 'master' branch
 
-*** pre-release 14.7 ***
+*** release 14.8 ***
 (the official name of this release could be varied by changes in progress)
+
+#### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
+Fare una pagina wiki in cui discutere di ISABEL e BRENDA assieme, dal momento che BRENDA è il core program e ISABEL è diventato un wrapper che richiama BRENDA
+################################################################################
+
+
+*** release 14.7 ***
 - INSTALL: new version of installer script
 - AMB2GMX: new release (14.6.a)
 - miniAMBER.fix: alternative version of <miniAMBER.pl> with constrained workflow
@@ -16,35 +23,6 @@ REMEMBER to read...
 - QUEST: new release (14.6.a)
 - ISABEL: new release (14.6.a)
 - BRENDA: new release (14.6.a)
-
-#### NUOVA PAGINA WIKI PER QUEST #######################################
-Già pronta nel file Qlite/README.txt
-################################################################################
-
-#### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
-Fare una pagina wiki in cui discutere di ISABEL e BRENDA assieme, dal momento che BRENDA è il core program e ISABEL è diventato un wrapper che richiama BRENDA
-################################################################################
-
-#### ROBA DA AGGIORNARE SULLA PAGINA WIKI PRINCIPALE ###########################
-WARNING: for users who had already installed earlier version of riceddario (14.6 or previous) please modify the bashrc file as follows (the path "/home/dario" will have to be substituted as well):
-
--# RICEDDARIO package [https://github.com/dcorrada/RICEDDARIO]
--# main paths
--export PATH=/home/dario/GITs/RICEDDARIO/structure:/home/dario/GITs/RICEDDARIO/WORKFLOW:/home/dario/GITs/RICEDDARIO/lib:/home/dario/GITs/RICEDDARIO/job_scheduling:/home/dario/GIT-s/RICEDDARIO/web_services:/home/dario/GITs/RICEDDARIO/QUEST:/home/dario/GITs/RICEDDARIO/sequence:$PATH
--export PERL5LIB=/home/dario/GITs:/home/dario/GITs/RICEDDARIO:$PERL5LIB
--# EMMA
--export PATH=/home/dario/GITs/RICEDDARIO/EMMA/EMMA/bin:/home/dario/GITs/RICEDDARIO/EMMA/RAGE/bin:$PATH
--export PERL5LIB=/home/dario/GITs/RICEDDARIO/EMMA:$PERL5LIB
--# ISABEL
--export PATH=/home/dario/GITs/RICEDDARIO/ISABEL/bin:$PATH
--export PERL5LIB=/home/dario/GITs/RICEDDARIO/ISABEL:$PERL5LIB
--# third parties scripts
--export PATH=/home/dario/GITs/RICEDDARIO/third_parties/PyMol:/home/dario/GITs/RICEDDARIO/third_parties/MAQ:/home/dario/GITs/RICEDDARIO/third_parties/GROMACS:/home/dario/GITs/RICEDDARIO/third_parties/MODELLER:/home/dario/GITs/RICEDDARIO/third_parties/AMBER:/home/dario/GITs/RICEDDARIO/third_parties/Delphi:/home/dario/GITs/RICEDDARIO/third_parties/VMD:/home/dario/GITs/RICEDDARIO/third_parties/BOWTIE:$PATH
-+# RICEDDARIO package [https://github.com/dcorrada/RICEDDARIO]
-+export RICEDDARIOHOME=/home/dario/RICEDDARIO
-+export PERL5LIB=/home/dario:$PERL5LIB
-+source /home/dario/RICEDDARIO/.paths.sh
-################################################################################
 
 *** release 14.6 ***
 - AMB2GMX: new release (14.5.b)
