@@ -1,16 +1,5 @@
-gio 29 mag 2014, 12.22.26, CEST
+sab 28 giu 2014, 14.30.03, CEST
 ./
-├── BRENDA/
-│   ├── bin/
-│   │   ├── BRENDA.pl*
-│   │   └── BRENDA.statistics.pl*
-│   ├── data/
-│   │   └── BRENDA_list.csv
-│   ├── lib/
-│   │   ├── FileIO.pm*
-│   │   ├── Generic_class.pm*
-│   │   └── Rambo.pm*
-│   └── README.txt
 ├── CONTRIBUTORS.txt
 ├── date.txt
 ├── EMMA/
@@ -48,19 +37,6 @@ gio 29 mag 2014, 12.22.26, CEST
 │   ├── README.txt
 │   └── RELEASE.NOTES.txt
 ├── INSTALL.pl*
-├── ISABEL/
-│   ├── bin/
-│   │   ├── blocks
-│   │   ├── diagoxxl
-│   │   └── ISABEL.pl*
-│   ├── data/
-│   │   ├── leaprc.ff03.v11
-│   │   ├── leaprc.ff03.v9
-│   │   ├── min.in
-│   │   └── mm_pbsa.in
-│   └── lib/
-│       ├── FileIO.pm*
-│       └── Generic_class.pm*
 ├── job_scheduling/
 │   ├── job_PBS_launcher.pl*
 │   ├── PBSmanager/
@@ -79,8 +55,9 @@ gio 29 mag 2014, 12.22.26, CEST
 │   ├── Kabat.pm*
 │   ├── MatrixDiff.pm*
 │   ├── Parse_Array.pm*
-│   └── PBS_manager/
-│       └── Scheduler.pm*
+│   ├── PBS_manager/
+│   │   └── Scheduler.pm*
+│   └── SQLite.pm*
 ├── LICENSES/
 │   ├── CC_v3.pdf
 │   └── GPL_V2.txt
@@ -135,20 +112,18 @@ gio 29 mag 2014, 12.22.26, CEST
 │       ├── SemanticSimilarity.R
 │       ├── Term2Target.R
 │       └── zzz.R
-├── QUEST/
-│   ├── demo/
-│   │   ├── amae.maegz
-│   │   ├── batch.normals.pl*
-│   │   ├── batch.schrodingers.pl*
-│   │   ├── child.sh*
-│   │   ├── genmaes.pl*
-│   │   ├── parent.sh*
-│   │   └── ps.monitor.sh*
+├── Qlite/
 │   ├── QUEST.client.pl*
 │   ├── QUEST.server.pl*
 │   ├── quotes.txt*
 │   ├── README.txt
-│   └── RELEASE.NOTES.txt
+│   ├── RELEASE.NOTES.txt
+│   └── test/
+│       ├── amae.maegz
+│       ├── batch.normals.pl*
+│       ├── batch.schrodingers.pl*
+│       ├── genmaes.pl*
+│       └── sleeper.sh*
 ├── README.txt
 ├── RELEASE.NOTES.txt
 ├── sequence/
@@ -210,12 +185,30 @@ gio 29 mag 2014, 12.22.26, CEST
 ├── third_parties/
 │   ├── AMBER/
 │   │   ├── AMB2GMX.pl*
+│   │   ├── BRENDA.pl*
 │   │   ├── equilibration.in*
 │   │   ├── heating.in*
+│   │   ├── ISABEL.pl*
 │   │   ├── miniAMBER.pl*
 │   │   ├── minimization.in*
+│   │   ├── MM-GBSA.in
 │   │   ├── PDB4AMBER.pl*
-│   │   └── production.in*
+│   │   └── production.in
+│   ├── BLOCKS/
+│   │   ├── BLOCKS.i686*
+│   │   ├── BLOCKS.x86_64*
+│   │   ├── demo/
+│   │   │   ├── blocks.inp
+│   │   │   ├── fort.30
+│   │   │   ├── fort.31
+│   │   │   ├── fort.35
+│   │   │   └── INSTRUCTIONS.txt
+│   │   ├── gnuplot2.inp
+│   │   ├── gnuplot.inp
+│   │   ├── README.txt
+│   │   └── src/
+│   │       ├── blocks.f
+│   │       └── subutil.f
 │   ├── BOWTIE/
 │   │   ├── bowtie_input_prepare.pl*
 │   │   ├── bowtie_pipeline.pl*
@@ -346,4 +339,4 @@ gio 29 mag 2014, 12.22.26, CEST
     ├── sh_scheduler.pl*
     └── WORKFLOW.MAP.mm
 
-61 directories, 284 files
+56 directories, 282 files
