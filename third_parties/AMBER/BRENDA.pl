@@ -1,6 +1,19 @@
 #!/usr/bin/perl
 # -d
 
+# ########################### RELEASE NOTES ####################################
+#
+# release 14.7.a        - changed default values for options
+#                       - changed format of files produced
+#                       - interaction energy matrix is now based considering 
+#                         only the stabilizing interactions between sidechains
+#                       - improved visualization of interaction energy profile 
+#                         and related matrix
+#
+# release 14.6.a        - initial release
+#
+# ##############################################################################
+
 use strict;
 use warnings;
 
@@ -22,24 +35,28 @@ use Data::Dumper;
 ###################################################################
 use Cwd;
 use Carp;
+use Statistics::Descriptive;
 
-## GLOBS ##
+## GLOBS ##*** REQUIRED SOFTWARE ***
 our $workdir = getcwd();
 our %bins = ( 'BLOCKS' => '', 'R' => '', 'GNUPLOT' => '' );
 our @eigenvalues;
 our @eigenvectors;
-our @quali;
-our $filter = 0;
-our $snob; # bypass BLOCKS?
+our @quali_evect;
+our @quali_comp;
+our $filter = 4;
+our $auto = '1';
+our $verbose;
+our $totres; # numero di residui del sistema
 ## SBLOG ##
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('snob|s' => \$snob, 'filter|f=i' => \$filter);
+    GetOptions('auto|a=i' => \$auto, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter);
     my $splash = <<ROGER
 ********************************************************************************
 BRENDA - BRing the ENergy, ya damned DAemon!
-release 14.6.a
+release 14.7.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -67,6 +84,8 @@ Intramolecular type 1-4 interaction are excluded from the calculation.
 From the diagonalization of this matrix the most representative eigenvectors 
 will be collected  [3].
 
+RELEASE NOTES: see the header in the source code.
+
 For further theoretical details and in order to use this program please cite the 
 following references:
 
@@ -82,26 +101,30 @@ following references:
 
 *** USAGE ***
 
-    \$ BRENDA.pl <enedecomp.dat> [-snob] [-filter 4]
+    \$ BRENDA.pl <enedecomp.dat> [-auto 0] [-filter 2] [-verbose]
 
     "enedecomp.dat"     mandatory, energy decomposition input file
     
-    -snob               the script will bypass the eigenvector list evaluation 
-                        and will choose only the first one (see also ref. [1] 
-                        for further details)
+    -auto <integer>     method of eigenvector selection:
+                        0 - select only the first eigenvector, see also [1]
+                        1 - DEFAULT, use BLOCK for estimating the significant 
+                            eigenvectors, see also [3]
     
     -filter <integer>   number of contig residues for which interaction energy 
-                        will not considered (DEFAULT: 0)
+                        will not considered (DEFAULT: 4)
+    
+    -verbose            keep intermediate files
 
 *** INPUT FILE ***
 
 The file "enedecomp.dat" is the output file obtained from MM-GBSA pairwise 
-energy decomposition. It will be obtained from AMBER's "MMPBSA.py" program, 
+energy decomposition. It will be obtained from AMBER's MMPBSA.py program, 
 launching a command like follows:
 
     \$ MMPBSA.py -O -i MMGBSA.in -sp solvated.prmtop -cp dry.prmtop -y MD.mdcrd
 
-A template of the input script file "MMGBSA.in" could be as follows:
+The specific output file format accepted by BRENDA could be obtained by 
+submitting to MMPBSA.py the following input script:
 
     Input file for GB calculation
     \&general
@@ -113,16 +136,10 @@ A template of the input script file "MMGBSA.in" could be as follows:
      igb = 5,
     \/
     \&decomp
-     dec_verbose = 2,
+     csv_format = 0,
+     dec_verbose = 3,
      idecomp = 3,
     \/
-
-*** NOTE ABOUT FILTER OPTION ***
-
-The '-filter' option should be used carefully, diverse values will produce 
-really different results. As rule of thumb, a value of 0 usually emphasizes 
-interactions internals to secondary structure elements; values greater than 0 
-will rise interactions between distal residues.
 ROGER
         ;
         print $help;
@@ -160,68 +177,167 @@ INIT: {
 }
 
 INPUT: {
-    # parso il file di output di MMPBSA.py
+    # apro il file di output di MMPBSA.py 
     printf("%s parsing MM-GBSA input data...", clock());
     open(IN, '<' . $ARGV[0]) or croak "E- unable to open <$ARGV[0]> file \n\t";
-    my @ene_matrix;
-    while (my $newline = <IN>) {
+    my @file_content = <IN>;
+    close IN;
+    
+    # faccio un check preiminare del suo contenuto
+    my $match = grep(/Pairwise decomp/, @file_content);
+    $match += grep(/Resid 1 \| Resid 2 \| /, @file_content);
+    $match += grep(/Total Energy Decomposition:/, @file_content);
+    $match += grep(/Sidechain Energy Decomposition:/, @file_content);
+    croak "E- wrong input file format, unable to parse\n\t" if ($match < 6);
+    
+    # creo le matrici di interazione
+    my @total_matrix;
+    my @sidechain_matrix;
+    my $which = 'null';
+    while (my $newline = shift @file_content) {
         chomp $newline;
-        if ($newline =~ /^\w{1,3}\s{1,3}\d{1,3},/) {
-            my @values = split(',',$newline);
-            my ($resa) = $values[0] =~ /([\d]+)$/;
-            my ($resb) = $values[1] =~ /([\d]+)$/;
-            my $internal = $values[2];
-            my $total = $values[17];
-            $resa = $resa - 1;
-            $resb = $resb - 1;
-            $total = sprintf("%.6f", $total - $internal);
-            $ene_matrix[$resa][$resb] = $total;
+        if ($newline =~ /Total Energy Decomposition:/) {
+            $which = 'total';
+            next;
+        } elsif ($newline =~ /Sidechain Energy Decomposition:/) {
+            $which = 'sidechain';
+            next;
+        } elsif ($newline =~ /Backbone Energy Decomposition:/) {
+            $which = 'backbone';
+            next;
+        }
+        if ($which =~ /(total|sidechain)/) {
+            next unless $newline;
+            next if ($newline =~ /^(-----|Resid)/);
+            my @splitted = unpack('Z9Z10Z22Z22Z22Z22Z22Z21', $newline);
+            my ($i) = $splitted[0] =~ /(\d+) \|$/;
+            my ($j) = $splitted[1] =~ /(\d+) \|$/;
+            my ($value) = $splitted[7] =~ /([-\.\d]+) \+\/-/;
+            if ($which eq 'total') {
+                $total_matrix[$i-1][$j-1] = $value;
+            } else {
+                $sidechain_matrix[$i-1][$j-1] = $value;
+            }
         } else {
             next;
         }
     }
-    close IN;
     
-    # "simmetrizzo" la matrice delle energie d'interazione
-    my $rows = scalar @{$ene_matrix[0]};
-    for (my $i = 0; $i < $rows; $i++) {
-        for (my $j = 0; $j < $rows; $j++) {
-            if (abs($i - $j) <= $filter) {
-                $ene_matrix[$i][$j] = 0E0;
-                $ene_matrix[$j][$i] = 0E0;
-            } elsif ($ene_matrix[$i][$j] == $ene_matrix[$j][$i]) {
+    $totres = scalar @total_matrix;
+    
+    # "simmetrizzo" la matrice delle energie della sidechain
+    for my $i (0..$totres-1) {
+        for my $j (0..$totres-1) {
+            if ($sidechain_matrix[$i][$j] == $sidechain_matrix[$j][$i]) {
                 next;
             } else {
-                my $ene1 = $ene_matrix[$i][$j];
-                my $ene2 = $ene_matrix[$j][$i];
+                my $ene1 = $sidechain_matrix[$i][$j];
+                my $ene2 = $sidechain_matrix[$j][$i];
                 my $ave = ($ene1 + $ene2) / 2;
-                $ave = sprintf("%.6f", $ave);
-                $ene_matrix[$i][$j] = $ave;
-                $ene_matrix[$j][$i] = $ave;
+                $ave = sprintf("%.3f", $ave);
+                $sidechain_matrix[$i][$j] = $ave;
+                $sidechain_matrix[$j][$i] = $ave;
             }
         }
     }
     
-    open(OUT, '>' . "$workdir/BRENDA.IMATRIX.csv");
-    for (my $i = 0; $i < $rows; $i++) {
-        my $newline = '';
-        for (my $j = 0; $j < $rows; $j++) {
-            $newline .= sprintf("%.6f;", $ene_matrix[$i][$j]);
+    # filtro la matrice delle energie della sidechain
+    for my $i (0..$totres-1) {
+        for my $j (0..$totres-1) {
+            if (abs($i - $j) <= $filter) {
+                $sidechain_matrix[$i][$j] = '0.000';
+                $sidechain_matrix[$j][$i] = '0.000';
+            } elsif ($sidechain_matrix[$i][$j] >= 0) {
+                $sidechain_matrix[$i][$j] = '0.000';
+            }
         }
-        $newline =~ s/;$/\n/;
-        print OUT $newline;
     }
-    close OUT;
+    
+    # scrivo le matrici su file
+    open(OUTT, '>' . "$workdir/BRENDA.IMATRIX.csv");
+    open(OUTS, '>' . "$workdir/_BRENDA.SMATRIX.csv");
+    for my $i (0..$totres-1) {
+        my ($linet, $lines) = ('', '');
+        for my $j (0..$totres-1) {
+            $linet .= sprintf("%.3f;", $total_matrix[$i][$j]);
+            $lines .= sprintf("%.3f;", $sidechain_matrix[$i][$j]);
+        }
+        $linet =~ s/;$/\n/;
+        $lines =~ s/;$/\n/;
+        print OUTT $linet;
+        print OUTS $lines;
+    }
+    close OUTT;
+    close OUTS;
     
     print "done\n";
 }
 
+# TOTAL: { # plot della matrice di interazione originale
+#     printf("%s generating raw interaction energy matrix...", clock());
+#     
+#     # parso il file della matrice delle energie di interazione
+#     open(IN, '<' . "$workdir/BRENDA.IMATRIX.csv");
+#     my @file_content = <IN>;
+#     close IN;
+#     
+#     my @enematrix;
+#     my $i = 0;
+#     while (my $newline = shift @file_content) {
+#         chomp $newline;
+#         next unless $newline;
+#         my @record = split(';', $newline);
+#         $enematrix[$i] = [ @record ];
+#         $i++;
+#     }
+#     
+#     # riscrivo la matrice in un formato leggibile da gnuplot
+#     my $content = '';
+#     foreach my $i (0..$totres-1) {
+#         foreach my $j (0..$totres-1) {
+#             $content .= sprintf("%d  %d  %.6f\n", $i+1, $j+1, $enematrix[$i][$j]);
+#         }
+#         $content .= "\n";
+#     }
+#     open(OUT, '>' . "$workdir/_BRENDA.IMATRIX.dat");
+#     print OUT $content;
+#     close OUT;
+#     
+#     # plotto la matrice
+#     my $gnuscript = <<ROGER
+# # Gnuplot script to draw energy matrix
+# # 
+# set terminal png size 2400, 2400
+# set output "BRENDA.IMATRIX.png"
+# set size square
+# set pm3d map
+# set palette defined ( 0 "blue", 1 "white", 2 "red" )
+# set cbrange[-1 to 1]
+# set tics out
+# set xrange[0:$totres+1]
+# set yrange[0:$totres+1]
+# set xtics 10
+# set xtics rotate
+# set ytics 10
+# set mxtics 10
+# set mytics 10
+# splot "_BRENDA.IMATRIX.dat"
+# ROGER
+#     ;
+#     open(GPL, '>' . "$workdir/_BRENDA.IMATRIX.gnuplot");
+#     print GPL $gnuscript;
+#     close GPL;
+#     my $gplot_log = qx/cd $workdir; $bins{'GNUPLOT'} _BRENDA.IMATRIX.gnuplot 2>&1/;
+#     
+#     print "done\n";
+# }
+
 DIAGONALLEY: { # diagonalizzo la matrice delle energie d'interazione
     printf("%s diagonalizing interaction energy matrix...", clock());
-    my $eval_file = "$workdir/BRENDAtmp.evalreverse.dat";
-    my $evect_file = "$workdir/BRENDAtmp.evectreverse.dat";
-    my $mat_file = "$workdir/BRENDA.IMATRIX.csv";
-    my $R_file = "$workdir/BRENDAtmp.pca.R";
+    my $eval_file = "$workdir/_BRENDA.EVAL.dat";
+    my $evect_file = "$workdir/_BRENDA.EVECT.dat";
+    my $mat_file = "$workdir/_BRENDA.SMATRIX.csv";
+    my $R_file = "$workdir/_BRENDA.pca.R";
     
     # creo lo script per R
     my $scRipt = <<ROGER
@@ -246,7 +362,7 @@ ROGER
 
 REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in questo caso sono gli autovettori associati agli autovalori più negativi)
     printf("%s reversing eigenlists...", clock());
-    open(EVAL, '<' . "$workdir/BRENDAtmp.evalreverse.dat");
+    open(EVAL, '<' . "$workdir/_BRENDA.EVAL.dat");
     my @content = <EVAL>;
     close EVAL;
     @content = reverse @content;
@@ -255,13 +371,13 @@ REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in qu
         my $value = sprintf("%.6f",$content[$i]);
         push(@eigenvalues, $value);
     }
-    open(EVAL, '>' . "$workdir/BRENDA.EVAL.dat");
+    open(EVAL, '>' . "$workdir/_BRENDA.EVAL.dat");
     foreach my $record (@eigenvalues) {
         print EVAL "$record\n";
     }
     close EVAL;
     
-    open(EVEC, '<' . "$workdir/BRENDAtmp.evectreverse.dat");
+    open(EVEC, '<' . "$workdir/_BRENDA.EVECT.dat");
     my $component = 0;
     while (my $newline = <EVEC>) {
         chomp $newline;
@@ -274,7 +390,7 @@ REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in qu
         $component++
     }
     close EVEC;
-    open(EVEC, '>' . "$workdir/BRENDA.EVECT.dat");
+    open(EVEC, '>' . "$workdir/_BRENDA.EVECT.dat");
     for (my $component = 0; $component < scalar @eigenvalues; $component++) {
         my $string = '  ';
         for (my $evect = 0; $evect < scalar @eigenvalues; $evect++) {
@@ -289,109 +405,91 @@ REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in qu
 }
 
 AUTOMAN: {
-    my $resnumber = scalar @eigenvalues;
-    
-    ($snob) and do { 
-        @quali = ( '0' );
+    if ($auto eq '0') { 
+        @quali_evect = ( '0' );
         printf("%s selected eigenvectors: 1\n", clock());
-        goto DISTRIB;
-    };
-    
-    FORECAST: {
+    } elsif ($auto eq '1') {
         printf("%s extracting significant eigenvectors...", clock());
-        ($resnumber) = $resnumber =~ /^(\d+)/;
         my $cmd = <<ROGER
 cd $workdir;
 touch fort.35;
-cp BRENDA.EVECT.dat fort.30
-cp BRENDA.EVAL.dat fort.31
-echo '\$PARAMS  NRES=$resnumber FRACT=0.6d0 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 LENGTH=50 \$END' | $bins{'BLOCKS'} 2> BLOCKS.error;
+cp _BRENDA.EVECT.dat fort.30
+cp _BRENDA.EVAL.dat fort.31
+echo '\$PARAMS  NRES=$totres FRACT=0.6d0 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 LENGTH=50 \$END' | $bins{'BLOCKS'} 2> BLOCKS.error;
 ROGER
         ;
         my $blocks_log = qx/$cmd/;
         my ($match_string) = $blocks_log =~ m/ESSENTIAL CLUSTER OF EIGENVECTORS:\s+([\s\d]+)\n/m;
-        open(BLOCKS, '>' . "$workdir/BRENDAtmp.BLOCKS.log");
+        open(BLOCKS, '>' . "$workdir/_BRENDA.BLOCKS.log");
         print BLOCKS $blocks_log;
         close BLOCKS;
         unless ($match_string) {
-            croak("\nE- forecasting error, please see BRENDAtmp.BLOCKS.log\n\t");
+            croak("\nE- forecasting error, please see _BRENDA.BLOCKS.log\n\t");
         }
-        @quali = split(/\s+/, $match_string);
+        @quali_evect = split(/\s+/, $match_string);
         print "done\n";
-        printf("%s selected eigenvectors: %s\n", clock(), join(' ',sort {$a <=> $b} @quali));
-        @quali = map { $_-1 } @quali;
-
+        printf("%s selected eigenvectors: %s\n", clock(), join(' ',sort {$a <=> $b} @quali_evect));
+        @quali_evect = map { $_-1 } @quali_evect;
+        qx/rm -rfv fort.*/;
+        unlink "BLOCKS.error";
+    } else {
+        croak("\nE- unknown method chosen for selecting eigenvectors\n\t");
     }
-    
-    qx/rm -rfv fort.*/;
-    unlink "BLOCKS.error";
 }
 
 DISTRIB: {
-    my $resnumber = scalar @eigenvalues;
-    my $threshold = sqrt ( 1 / $resnumber);
+    my $threshold = scalar @quali_evect * (sqrt ( 1 / $totres));
     printf("%s generating energy profile (threshold: %.3f)...", clock(), $threshold);
-    my @components = split(':', "0:" x $resnumber);
-    foreach my $av (@quali) {
-        for (my $i = 0; $i < $resnumber; $i++) {
-            $components[$i] = abs($eigenvectors[$av][$i])
-                if (abs($eigenvectors[$av][$i]) > abs($components[$i]));
+    
+    # creo il profilo delle componenti e lo scrivo su file
+    my @components = split(':', "0:" x $totres);
+    foreach my $av (@quali_evect) {
+        for my $i (0..$totres-1) {
+            $components[$i] += $eigenvectors[$av][$i];
         }
     }
     my $profile = ''; my $i = 1;
     foreach my $value (@components) {
-        $profile .= sprintf("%d  %.6f\n", $i, $value);
+        $profile .= sprintf("%d  %.3f\n", $i, $value);
         $i++;
     }
-    
     open(OUT, '>' . "$workdir/BRENDA.PROFILE.dat");
     print OUT $profile;
     close OUT;
     
+    # separating values above or below threshold
+    open(DOWN, '>' . "$workdir/_BRENDA.down");
+    my $down = ''; $i = 1;
+    foreach my $value (@components) {
+        my $eval = $value;
+        $eval = 0E0 if (abs($eval) > $threshold);
+        $down .= sprintf("%d  %.3f\n", $i, $eval);
+        $i++;
+    }
+    print DOWN $down;
+    close DOWN;
+    open(UP, '>' . "$workdir/_BRENDA.up");
+    my $up = ''; $i = 1;
+    foreach my $value (@components) {
+        my $eval = $value;
+        if (abs($eval) < $threshold) {
+            $eval = 0E0;
+        } else {
+            push(@quali_comp, $i-1);
+        }
+        $up .= sprintf("%d  %.3f\n", $i, $eval);
+        $i++;
+    }
+    print UP $up;
+    close UP;
     
-    GNUPLOT: {
-        open(IN, '<' . "$workdir/BRENDA.PROFILE.dat");
-        my $content = [ ];
-        @{$content} = <IN>;
-        close IN;
-        my @components;
-        while (my $newline = shift @{$content}) {
-            chomp $newline;
-            next unless $newline;
-            my ($res, $value) = $newline =~ /(\d+)\s+([\-\.\d]+)/;
-            push(@components, $value);
-        }
-        my $threshold = sqrt ( 1 / scalar @components); 
-        
-        # separating values above or below threshold
-        open(DOWN, '>' . "$workdir/BRENDAtmp.down");
-        my $down = ''; my $i = 1;
-        foreach my $value (@components) {
-            my $eval = $value;
-            $eval = 0E0 if (abs($eval) > $threshold);
-            $down .= sprintf("%d  %.6f\n", $i, $eval);
-            $i++;
-        }
-        print DOWN $down;
-        close DOWN;
-        open(UP, '>' . "$workdir/BRENDAtmp.up");
-        my $up = ''; $i = 1;
-        foreach my $value (@components) {
-            my $eval = $value;
-            $eval = 0E0 if (abs($eval) < $threshold);
-            $up .= sprintf("%d  %.6f\n", $i, $eval);
-            $i++;
-        }
-        print UP $up;
-        close UP;
-        
-        my $max = 0E0; my $min = 0E0;
-        foreach my $value (@components) {
-            $max = $value if ($value > $max);
-            $min = $value if ($value < $min);
-        }
-        
-        my $gnuscript = <<ROGER
+    my $max = 0E0; my $min = 0E0;
+    foreach my $value (@components) {
+        $max = $value if ($value > $max);
+        $min = $value if ($value < $min);
+    }
+    
+    my $gnuscript = <<ROGER
 # Gnuplot script to draw energy distribution
 # 
 set terminal png size 2400, 800
@@ -399,107 +497,134 @@ set size ratio 0.33
 set output "BRENDA.PROFILE.png"
 set key
 set tics out
-set xrange[1:$resnumber]
+set xrange[0:$totres+1]
 set xtics rotate
 set xtics nomirror
 set xtics 10
 set mxtics 10
 set xlabel "resID"
-set yrange [$min:$max+0.1]
+set yrange [$min-0.1:$max+0.1]
 set ytics 0.1
 set mytics 10
-plot    "BRENDAtmp.up" with impulses lw 3 lt 1, \\
-        "BRENDAtmp.down" with impulses lw 3 lt 9
+plot    "_BRENDA.up" with impulses lw 3 lt 1, \\
+        "_BRENDA.down" with impulses lw 3 lt 9
 ROGER
-        ;
-        open(GPL, '>' . "$workdir/BRENDAtmp.enedist.gnuplot");
-        print GPL $gnuscript;
-        close GPL;
-        my $gplot_log = qx/cd $workdir; $bins{'GNUPLOT'} BRENDAtmp.enedist.gnuplot 2>&1/;
-    }
+    ;
+    open(GPL, '>' . "$workdir/_BRENDA.enedist.gnuplot");
+    print GPL $gnuscript;
+    close GPL;
+    my $gplot_log = qx/cd $workdir; $bins{'GNUPLOT'} _BRENDA.enedist.gnuplot 2>&1/;
+
     print "done\n";
 }
 
 NEWMATRIX: {
-    printf("%s generating minimal interaction energy matrix...", clock());
-    my $resnumber = scalar @eigenvalues;
+    printf("%s generating interaction energy matrix...", clock());
+    
+    # parso il file della matrice delle energie di interazione
+    open(IN, '<' . "$workdir/_BRENDA.SMATRIX.csv");
+    my @file_content = <IN>;
+    close IN;
     my @enematrix;
-    foreach (my $i = 0; $i < $resnumber; $i++) {
-        foreach (my $j = 0; $j < $resnumber; $j++) {
-            $enematrix[$i][$j] = 0E0;
+    my $i = 0;
+    while (my $newline = shift @file_content) {
+        chomp $newline;
+        next unless $newline;
+        my @record = split(';', $newline);
+        $enematrix[$i] = [ @record ];
+        $i++;
+    }
+    
+    # filtro la matrice sulla base delle component individuate come rilevanti
+    for my $i (@quali_comp) {
+        for my $j (0..$totres-1) {
+            $enematrix[$i][$j] = abs $enematrix[$i][$j];
+            $enematrix[$j][$i] = abs $enematrix[$j][$i];
         }
     }
     
-    foreach my $automan (@quali) {
-        foreach (my $i = 0; $i < $resnumber; $i++) {
-            foreach (my $j = 0; $j < $resnumber; $j++) {
-                my $value = $eigenvalues[$automan] * $eigenvectors[$automan][$i] * $eigenvectors[$automan][$j];
-                $enematrix[$i][$j] += $value;
-            }
-        }
-    }
+#     # ricostruisco la matrice sulla base degli autovettori selezionati
+#     for my $automan (@quali_evect) {
+#         for my $i (0..$totres-1) {
+#             for my $j (0..$totres-1) {
+#                 my $value = $eigenvalues[$automan] * $eigenvectors[$automan][$i] * $eigenvectors[$automan][$j];
+#                 $enematrix[$i][$j] += $value;
+#             }
+#         }
+#     }
     
+    # riscrivo la matrice in un formato leggibile da gnuplot
     my $content = '';
-    foreach (my $i = 0; $i < $resnumber; $i++) {
-        foreach (my $j = 0; $j < $resnumber; $j++) {
+    foreach my $i (0..$totres-1) {
+        foreach my $j (0..$totres-1) {
+            $content .= sprintf("%d  %d  %.6f\n", $i+1, $j+1, $enematrix[$i][$j]);
+        }
+        $content .= "\n";
+    }
+    open(OUT, '>' . "$workdir/_BRENDA.SMATRIX.dat");
+    print OUT $content;
+    close OUT;
+    
+    $content = '';
+    for my $i (0..$totres-1) {
+        for my $j (0..$totres-1) {
             $content .= sprintf("%d  %d  %.6f\n", $i+1, $j+1, $enematrix[$i][$j]);
         }
         $content .= "\n";
     }
     
-    open(OUT, '>' . "$workdir/BRENDA.MMATRIX.dat");
+    open(OUT, '>' . "$workdir/_BRENDA.SMATRIX.dat");
     print OUT $content;
     close OUT;
     
-    GNUPLOT: {
-        open(IN, '<' . "$workdir/BRENDA.MMATRIX.dat");
-        my $content = [ ];
-        @{$content} =<IN>;
-        close IN;
-        my $ave = 0E0; my $counter = 0E0;
-        while (my $row = shift @{$content}) {
-            chomp $row;
-            next unless $row;
-            my ($r1,$r2,$value) = split(/\s+/, $row);
-            if ($value < 0) {
-                $ave += $value;
-                $counter++;
-            }
-        }
-        $ave = $ave / $counter;
-        
-        my $gnuscript = <<ROGER
+    open(IN, '<' . "$workdir/_BRENDA.SMATRIX.dat");
+    $content = [ ];
+    @{$content} =<IN>;
+    close IN;
+    my @data;
+    while (my $row = shift @{$content}) {
+        chomp $row;
+        next unless $row;
+        my ($r1,$r2,$value) = split(/\s+/, $row);
+        push (@data, $value) if ($value < 0);
+    }
+    my $stat = Statistics::Descriptive::Full->new();
+    $stat->add_data(@data);
+    my $ave = $stat->mean();
+    my $stdev = $stat->standard_deviation();
+    
+    my $gnuscript = <<ROGER
 # Gnuplot script to draw energy matrix
 # 
 set terminal png size 2400, 2400
 set output "BRENDA.MMATRIX.png"
 set size square
 set pm3d map
-set palette rgbformulae 34,35,36
-set cbrange[$ave-0.5 to $ave]
+set palette defined ( 0 "blue", 1 "white", 2 "red" )
+set cbrange[-0.1 to 0.1]
 set tics out
-set xrange[0:$resnumber+1]
-set yrange[0:$resnumber+1]
+set xrange[0:$totres+1]
+set yrange[0:$totres+1]
 set xtics 10
 set xtics rotate
 set ytics 10
 set mxtics 10
 set mytics 10
-splot "BRENDA.MMATRIX.dat"
+splot "_BRENDA.SMATRIX.dat"
 ROGER
-        ;
-        open(GPL, '>' . "$workdir/BRENDAtmp.enematrix.gnuplot");
-        print GPL $gnuscript;
-        close GPL;
-        my $gplot_log = qx/cd $workdir; $bins{'GNUPLOT'} BRENDAtmp.enematrix.gnuplot 2>&1/;
-    }
+    ;
+    open(GPL, '>' . "$workdir/_BRENDA.enematrix.gnuplot");
+    print GPL $gnuscript;
+    close GPL;
+    my $gplot_log = qx/cd $workdir; $bins{'GNUPLOT'} _BRENDA.enematrix.gnuplot 2>&1/;
     
     print "done";
 }
 
 FINE: {
-    qx/rm -rfv BRENDAtmp.*/; # rimuovo i file intermedi
-    
+    unless ($verbose) {
+        qx/rm -rfv _BRENDA.*/; # rimuovo i file intermedi
+    };
     print "\n\n*** ADNERB ***\n";
     exit;
 }
