@@ -134,6 +134,7 @@ submitting to MMPBSA.py the following input script:
     \/
     \&gb
      igb = 5,
+     saltcon = 0.154,
     \/
     \&decomp
      csv_format = 0,

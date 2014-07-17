@@ -3,6 +3,8 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 14.7.b        - added physiological salt concentration (0.154 M)
+#
 # release 14.7.a        - treatment of systems containing small ligand
 #                       - integration of BRENDA 14.7.a
 #
@@ -68,7 +70,7 @@ USAGE: {
     my $splash = <<ROGER
 ********************************************************************************
 ISABEL - ISabel is Another BEppe Layer
-release 14.7.a
+release 14.7.b
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -160,7 +162,9 @@ ISABEL
      FILE                     DESCRIPTION
     ----------------------------------------------------------------------------
      protein.pdb              the protein structure file in PDB format, it must
-                              be correctly protonated
+                              be correctly protonated; in case of complex with 
+                              small molecule (-ligand option) this file 
+                              identifies ONLY the receptor molecule
      
      ligand.mol2              required with -ligand option, the small molecule 
                               structure file in MOL2 format obtained by a 
@@ -390,6 +394,7 @@ Input file for GB calculation
 /
 &gb
  igb = 5,
+ saltcon = 0.154,
 /
 &decomp
  csv_format = 0,
