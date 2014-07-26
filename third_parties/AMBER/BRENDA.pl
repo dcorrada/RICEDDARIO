@@ -3,6 +3,10 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 14.7.b        - parse input file containing dG values (-deltas)
+#                       - plot custom normalized matrices (-range)
+#                       - new method for selecting eigenvectors
+#
 # release 14.7.a        - changed default values for options
 #                       - changed format of files produced
 #                       - interaction energy matrix is now based considering 
@@ -47,16 +51,18 @@ our @quali_comp;
 our $filter = 4;
 our $auto = '1';
 our $verbose;
+our $deltas;
+our $cbrange = 0.1;
 our $totres; # numero di residui del sistema
 ## SBLOG ##
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('auto|a=i' => \$auto, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter);
+    GetOptions('auto|a=i' => \$auto, 'deltas|d' => \$deltas, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter, 'range|r=f' => \$cbrange);
     my $splash = <<ROGER
 ********************************************************************************
 BRENDA - BRing the ENergy, ya damned DAemon!
-release 14.7.a
+release 14.7.b
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -101,18 +107,25 @@ following references:
 
 *** USAGE ***
 
-    \$ BRENDA.pl <enedecomp.dat> [-auto 0] [-filter 2] [-verbose]
+    \$ BRENDA.pl <enedecomp.dat> [-auto 0] [-filter 2] [-verbose] [-deltas]
 
     "enedecomp.dat"     mandatory, energy decomposition input file
+    
+    -deltas             perform calculations over dG values
     
     -auto <integer>     method of eigenvector selection:
                         0 - select only the first eigenvector, see also [1]
                         1 - DEFAULT, use BLOCK for estimating the significant 
                             eigenvectors, see also [3]
+                        2 - collects the first n eigenvectors until a threshold 
+                            of cumulated variance is reached (0.75)
     
     -filter <integer>   number of contig residues for which interaction energy 
                         will not considered (DEFAULT: 4)
     
+    -range <float>      energy threshold to normalize the plot of interaction 
+                        energy matrix, in kcal/mol (DEFAULT: 0.1)
+        
     -verbose            keep intermediate files
 
 *** INPUT FILE ***
@@ -120,8 +133,11 @@ following references:
 The file "enedecomp.dat" is the output file obtained from MM-GBSA pairwise 
 energy decomposition. It will be obtained from AMBER's MMPBSA.py program, 
 launching a command like follows:
-
+    
     \$ MMPBSA.py -O -i MMGBSA.in -sp solvated.prmtop -cp dry.prmtop -y MD.mdcrd
+    
+    # variant for using deltas option (STP protocol)
+    \$ MMPBSA.py -O -i MMGBSA.in -sp solvated.prmtop -cp comp.prmtop -rp rec.prmtop -lp lig.prmtop -y MD.mdcrd
 
 The specific output file format accepted by BRENDA could be obtained by 
 submitting to MMPBSA.py the following input script:
@@ -195,6 +211,7 @@ INPUT: {
     my @total_matrix;
     my @sidechain_matrix;
     my $which = 'null';
+    my $section = 'Complex';
     while (my $newline = shift @file_content) {
         chomp $newline;
         if ($newline =~ /Total Energy Decomposition:/) {
@@ -206,8 +223,25 @@ INPUT: {
         } elsif ($newline =~ /Backbone Energy Decomposition:/) {
             $which = 'backbone';
             next;
+        } elsif ($newline =~ /Complex:/) {
+            $section = 'Complex';
+            next;
+        } elsif ($newline =~ /Receptor:/) {
+            $section = 'Receptor';
+            next;
+        } elsif ($newline =~ /Ligand:/) {
+            $section = 'Ligand';
+            next;
+        } elsif ($newline =~ /DELTAS:/) {
+            $section = 'DELTAS';
+            next;
         }
         if ($which =~ /(total|sidechain)/) {
+            if ($deltas) {
+                next unless ($section eq 'DELTAS');
+            } else {
+                next unless ($section eq 'Complex');
+            }
             next unless $newline;
             next if ($newline =~ /^(-----|Resid)/);
             my @splitted = unpack('Z9Z10Z22Z22Z22Z22Z22Z21', $newline);
@@ -416,7 +450,7 @@ cd $workdir;
 touch fort.35;
 cp _BRENDA.EVECT.dat fort.30
 cp _BRENDA.EVAL.dat fort.31
-echo '\$PARAMS  NRES=$totres FRACT=0.6d0 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 LENGTH=50 \$END' | $bins{'BLOCKS'} 2> BLOCKS.error;
+echo '\$PARAMS  NRES=$totres FRACT=0.6 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 LENGTH=50 \$END' | $bins{'BLOCKS'} 2> BLOCKS.error;
 ROGER
         ;
         my $blocks_log = qx/$cmd/;
@@ -433,6 +467,48 @@ ROGER
         @quali_evect = map { $_-1 } @quali_evect;
         qx/rm -rfv fort.*/;
         unlink "BLOCKS.error";
+    } elsif ($auto eq '2') {
+        my $varthres = 0.75; # quanta varianza cumulata devono spiegare gli autovettori?
+        my $mat_file = "$workdir/_BRENDA.SMATRIX.csv";
+        my $R_file = "$workdir/_BRENDA.sdev.R";
+        my $sdevtable = "$workdir/_BRENDA.CUMULATIVE.dat";
+        
+        # creo lo script per R
+        my $scRipt = <<ROGER
+ene.mat <- as.matrix(read.csv("$mat_file", header = FALSE, sep = ";", row.names = NULL, stringsAsFactors = FALSE, dec = ".")) # importing interactione energy matrix
+mypca <- princomp(ene.mat) # performing PCA analysis
+summa <- summary(mypca)
+vars <- summa\$sdev^2
+vars <- vars/sum(vars)
+tabela <- rbind("standard_deviation" = summa\$sdev, "proportion_of_variance" = vars, "cumulative_proportion" = cumsum(vars))
+transposed <- t(tabela)
+write.table(transposed, file = "$sdevtable", quote = FALSE, row.names = FALSE, col.names = TRUE, sep = ";", dec = ".") 
+ROGER
+        ;
+        open(SCRIPT, '>' . $R_file);
+        print SCRIPT $scRipt;
+        close SCRIPT;
+        
+        # lancio l'analisi PCA
+        my $log = qx/cd $workdir;$bins{'R'} $R_file 2>&1/;
+#         print "\n<<$log>>"; # vedo cosa combina lo script
+
+        # leggo la tabella della varianza cumulata
+        open(TABLE, '<' . $sdevtable);
+        my @file_content = <TABLE>;
+        close TABLE;
+        shift @file_content; # rimuovo l'header
+        my $num = 0E0;
+        while (my $newline = shift @file_content) {
+            chomp $newline;
+            my @values = split(';', $newline);
+            my $cumul = sprintf("%.2f", $values[2]);
+            push(@quali_evect, $num);
+            $num++;
+            last if ($cumul > $varthres);
+        }
+        my @printo = map { $_+1 } @quali_evect;
+        printf("%s selected eigenvectors: %s\n", clock(), join(' ', @printo));
     } else {
         croak("\nE- unknown method chosen for selecting eigenvectors\n\t");
     }
@@ -602,7 +678,7 @@ set output "BRENDA.MMATRIX.png"
 set size square
 set pm3d map
 set palette defined ( 0 "blue", 1 "white", 2 "red" )
-set cbrange[-0.1 to 0.1]
+set cbrange[-$cbrange to $cbrange]
 set tics out
 set xrange[0:$totres+1]
 set yrange[0:$totres+1]
