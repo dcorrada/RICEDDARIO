@@ -1,0 +1,6 @@
+*** release 14.7 ***
+- bugfix (from dario.corrada@gmail.com)
+  when only an individual eigenvector was found as significant, an exception will be raised
+
+*** release 11.5 ***
+- initial release
