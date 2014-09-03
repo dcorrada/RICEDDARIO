@@ -8,8 +8,9 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release 14.8 *** (the official name of this release could be varied by changes in progress)
-- ISABEL: new release (14.7.a)
-- BRENDA: new release (14.7.b)
+- ISABEL: new release (14.7.b)
+- BRENDA: new release (14.8.a)
+- BRENDAppi: new release (14.8.a)
 
 #### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
 Fare una pagina wiki in cui discutere di ISABEL e BRENDA assieme, dal momento che BRENDA è il core program e ISABEL è diventato un wrapper che richiama BRENDA
