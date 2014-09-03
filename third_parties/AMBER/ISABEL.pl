@@ -6,7 +6,6 @@
 # release 14.7.b        - added physiological salt concentration (0.154 M)
 #
 # release 14.7.a        - treatment of systems containing small ligand
-#                       - integration of BRENDA 14.7.a
 #
 # release 14.6.a        - code completely revisited, new options and format of 
 #                         the file produced
@@ -59,6 +58,7 @@ our $auto = 1;
 our $ligand;
 our $verbose;
 our %bins;
+our $cbrange = 0.1;
 our $forcefield = 'ff99SB';
 our %ff = ( 
             'ff99SB'    => 'leaprc.ff99SB',
@@ -83,7 +83,7 @@ ROGER
     print $splash;
     
     use Getopt::Long;no warnings;
-    GetOptions('auto|a=i' => \$auto, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter, 'ligand|l=s' => \$ligand, 'forcefield|f=s' => \$forcefield);
+    GetOptions('auto|a=i' => \$auto, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter, 'ligand|l=s' => \$ligand, 'forcefield|f=s' => \$forcefield, 'range|r=f' => \$cbrange);
     unless ($ARGV[0]) {
         my $help = <<ROGER
 ISABEL is a Perl script which offers an automated pipeline for:
@@ -119,7 +119,7 @@ ISABEL
 ├── PDB4AMBER 14.5.a (*)
 ├── AMBER 12 or higher
 │   └── AMBER Tools compliant version
-└── BRENDA 14.7.a (*)
+└── BRENDA 14.8.a (*)
     ├── BLOCKS 11.5 (*)
     ├── GnuPlot 4.4.4 or higher
     └── R 2.10.0 or higher
@@ -148,8 +148,13 @@ ISABEL
     
     -auto <integer>       method of eigenvector selection:
                           0 - select only the first eigenvector, see also [1]
-                          1 - DEFAULT, use BLOCK for estimating the significant 
-                              eigenvectors, see also [3]
+                          1 - DEFAULT, use BLOCKS for estimating the 
+                              significant eigenvectors, see also [3]
+                          2 - collects the first n eigenvectors until a 
+                              threshold of cumulated variance is reached (0.75)
+    
+    -range <float>        energy threshold to normalize the plot of interaction 
+                          energy matrix, in kcal/mol (DEFAULT: 0.1)
     
     -filter <integer>     number of contig residues for which interaction energy 
                           will not considered (DEFAULT: 4)
@@ -189,13 +194,11 @@ ISABEL
      
      BRENDA.IMATRIX.csv       interaction energy matrix
      
-     BRENDA.PROFILE.dat       interaction energy profile extracted from the
-     BRENDA.PROFILE.png       Principal Components Analysis
+     BRENDA.PROFILE.dat       profile of the main energetic determinants
+                              extracted from the Principal Components Analysis
      
-     BRENDA.MMATRIX.png       image of the interaction energy matrix, positive 
-                              values (red spots) highlight such stabilizing 
-                              non-bonded interactions in which the critical 
-                              residues (from energy profile) are involved
+     BRENDA.IMATRIX.png       image of the interaction energy matrix, with the 
+                              profile of the main energetic determinants
     ----------------------------------------------------------------------------
 ROGER
         ;
@@ -424,7 +427,7 @@ BRENDA: {
     push(@{$inputfiles}, $infile);
     check_inputs($inputfiles);
     
-    my $log = qx/$bins{'BRENDA'} $infile -filter $filter -auto $auto -verbose 2>&1/;
+    my $log = qx/$bins{'BRENDA'} $infile -filter $filter -auto $auto -range $cbrange -verbose 2>&1/;
     print ISALOG $log;
     print "done\n"
 }

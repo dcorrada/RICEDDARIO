@@ -3,20 +3,7 @@
 
 # ########################### RELEASE NOTES ####################################
 #
-# release 14.8.a        - new summary image (matrix plus hotspots profile)
-#                       - new definition for hotspots profile
-#
-# release 14.7.b        - plot custom normalized matrices (-range)
-#                       - new method for selecting eigenvectors
-#
-# release 14.7.a        - changed default values for options
-#                       - changed format of files produced
-#                       - interaction energy matrix is now based considering 
-#                         only the stabilizing interactions between sidechains
-#                       - improved visualization of interaction energy profile 
-#                         and related matrix
-#
-# release 14.6.a        - initial release
+# release 14.8.a        - initial release
 #
 # ##############################################################################
 
@@ -43,27 +30,29 @@ use Cwd;
 use Carp;
 use Statistics::Descriptive;
 
-## GLOBS ##
+## GLOBS ##*** REQUIRED SOFTWARE ***
 our $workdir = getcwd();
-our %bins = ( 'BLOCKS' => '', 'R' => '', 'GNUPLOT' => '' );
+our %bins = ( 'R' => '', 'GNUPLOT' => '' );
 our @eigenvalues;
 our @eigenvectors;
 our @quali_evect;
+our @quali_comp;
 our $filter = 4;
-our $auto = '1';
 our $verbose;
 our $cbrange = 0.1;
+our $ppifile = 'null'; # lista dei residui che definiscono l'interfaccia
 our $totres; # numero di residui del sistema
-our $varthres = 0.75; # [opzione '-auto 2'] quanta varianza cumulata devono spiegare gli autovettori?
+our $varthres = 0.75; # quanta varianza cumulata devono spiegare gli autovettori?
 our $maxprof = 0; # massima valore degli hotspot
 ## SBLOG ##
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('auto|a=i' => \$auto, 'verbose|v' => \$verbose, 'filter|f=i' => \$filter, 'range|r=f' => \$cbrange, 'limit|l=f' => \$varthres,);
+    GetOptions('ppi|p=s' => \$ppifile, 'verbose|v' => \$verbose, 'limit|l=f' => \$varthres, 'filter|f=i' => \$filter, 'range|r=f' => \$cbrange);
     my $splash = <<ROGER
 ********************************************************************************
 BRENDA - BRing the ENergy, ya damned DAemon!
+PPI version
 release 14.8.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
@@ -79,7 +68,10 @@ ROGER
     unless ($ARGV[0]) {
         my $help = <<ROGER
 BRENDA is a Perl script for capturing the main determinants from the 
-stabilization energy of a protein.
+stabilization energy of a protein. In particular, the PPI version of BRENDA is 
+dedicated to extract such determinants that mostly contribute to the overall 
+variation on the binding energy, along the interface of protein-protein 
+interactions.
 
 It takes as an input the tabulated values obtained by the Energy Decomposition 
 Analysis from MM-GBSA calculations. Such values will constitute the pairwise 
@@ -90,7 +82,7 @@ solvation energy and pairwise electrostatic and van der Waals interactions.
 Intramolecular type 1-4 interaction are excluded from the calculation.
 
 From the diagonalization of this matrix the most representative eigenvectors 
-will be collected  [3].
+will be collected (until the cumulated variance threshold is reached).
 
 RELEASE NOTES: see the header in the source code.
 
@@ -99,40 +91,35 @@ following references:
 
 [1] Tiana G, Simona F, De Mori G, Broglia R, Colombo G. Protein Sci. 2004;13(1):113-24
 [2] Corrada D, Colombo G. J Chem Inf Model. 2013;53(11):2937-50
-[3] Genoni A, Morra G, Colombo G. J Phys Chem B. 2012;116(10):3331-43
 
 *** REQUIRED SOFTWARE ***
 
-- BLOCKS - release 11.5
 - GnuPlot 4.4.4 or higher
 - R v2.10.0 or higher
 
 *** SYNOPSIS ***
     
     # default usage
-    \$ BRENDA.pl enedecomp.dat
+    \$ BRENDAppi.pl enedecomp.dat
     
     # changing default parameters
-    \$ BRENDA.pl enedecomp.dat -auto 0 -filter 2
+    \$ BRENDAppi.pl enedecomp.dat -range 0.2 -filter 2
 
-*** OPTIONS ***
-    
-    -auto <integer>     method of eigenvector selection:
-                        0 - select only the first eigenvector, see also [1]
-                        1 - DEFAULT, use BLOCK for estimating the significant 
-                            eigenvectors, see also [3]
-                        2 - collects the first n eigenvectors until a threshold 
-                            of cumulated variance is reached (see -limit)
+*** USAGE ***
     
     -filter <integer>   number of contig residues for which interaction energy 
                         will not considered (DEFAULT: 4)
     
-    -limit <float>      [only with -auto 2] rate of comulated variance explained 
-                        by the selected eigenvectors (DEFAULT: 0.75)
+    -limit <float>      rate of comulated variance explained by the selected
+                        eigenvectors (DEFAULT: 0.75)
+    
+    -ppi <filename>     list of residues that define the PPI interface; 
+                        otherwise, determinants will be evaluated considering 
+                        the whole complex 
     
     -range <float>      energy threshold to normalize the plot of interaction 
                         energy matrix, in kcal/mol (DEFAULT: 0.1)
-        
+    
     -verbose            keep intermediate files
 
 *** INPUT FILE ***
@@ -141,8 +128,9 @@ The file "enedecomp.dat" is the output file obtained from MM-GBSA pairwise
 energy decomposition. It will be obtained from AMBER's MMPBSA.py program, 
 launching a command like follows:
     
-    \$ MMPBSA.py -O -i MMGBSA.in -sp solvated.prmtop -cp dry.prmtop -y MD.mdcrd
-    
+    # example using the STP protocol
+    \$ MMPBSA.py -O -i MMGBSA.in -sp solvated.prmtop -cp comp.prmtop -rp rec.prmtop -lp lig.prmtop -y MD.mdcrd
+
 The specific output file format accepted by BRENDA could be obtained by 
 submitting to MMPBSA.py the following input script:
 
@@ -164,16 +152,17 @@ submitting to MMPBSA.py the following input script:
 
 *** OUTPUT FILES ***
 
-The interaction energy matrix is depicted in "BRENDA.IMATRIX.png", the color 
+The interaction energy matrix is depicted in "BRENDA.SMATRIX.png", the color 
 ramp scale is defined within '-range xxx' kcal/mol. At bottom the hotspots 
-profile is shown.
+profile is shown. The interaction energy matrix show only the non-bonded 
+interactions between sidechains.
 
-Tabulated values of interaction energy matrix are in "BRENDA.IMATRIX.csv" file.
+Tabulated values of interaction energy matrix are in "BRENDA.SMATRIX.csv" file.
 
 The hotspot profile is tabulated in "BRENDA.PROFILE.dat". An hotspot is defined 
-if, among the selected eigenvectors, show a component value higher than a 
-threshold calculated as sqrt(1/totres). Each hotspot has a score related to the 
-cumulated variance explained by the eigenvectors in which it belongs.
+if, among the selected eigenvectors, show a component value higher than average. 
+Each hotspot has a score related to the cumulated variance explained by the 
+eigenvectors in which it belongs.
 ROGER
         ;
         print $help;
@@ -185,15 +174,6 @@ INIT: {
     # valuto l'architettura dell'OS
     my $arch = qx/uname -m/;
     chomp $arch;
-    
-    # cerco BLOCKS
-    if ($arch eq 'i686') { # architettura 32bit
-        $bins{'BLOCKS'} = qx/which BLOCKS.i686/;
-    } elsif ($arch eq 'x86_64') { # architettura 64bit
-        $bins{'BLOCKS'} = qx/which BLOCKS.x86_64/;
-    } else {
-        croak "E- unexpected OS architecture\n\t";
-    }
     
     # cerco R
     $bins{'R'} = qx/which R/;
@@ -211,61 +191,58 @@ INIT: {
 }
 
 INPUT: {
-    # apro il file di output di MMPBSA.py 
     printf("%s parsing MM-GBSA input data...", clock());
     open(IN, '<' . $ARGV[0]) or croak "E- unable to open <$ARGV[0]> file \n\t";
     my @file_content = <IN>;
     close IN;
     
-    # faccio un check preiminare del suo contenuto
+    # faccio un check preliminare del file per assicurarmi che MMPBSA.py abbia prodotto l'output nel formato corretto
     my $match = grep(/Pairwise decomp/, @file_content);
     $match += grep(/Resid 1 \| Resid 2 \| /, @file_content);
-    $match += grep(/Total Energy Decomposition:/, @file_content);
+    $match += grep(/DELTAS:/, @file_content);
     croak "E- wrong input file format, unable to parse\n\t" if ($match < 3);
     
     # creo le matrici di interazione
-    my @total_matrix;
+    my @sidechain_matrix;
     my $which = 'null';
     while (my $newline = shift @file_content) {
         chomp $newline;
-        if ($newline =~ /Total Energy Decomposition:/) {
-            $which = 'total';
-            next;
-        } elsif ($newline =~ /Sidechain Energy Decomposition:/) {
-            $which = 'sidechain';
-            next;
-        } elsif ($newline =~ /Backbone Energy Decomposition:/) {
-            $which = 'backbone';
+        if ($newline =~ /DELTAS:/) {
+            $which = 'DELTAS';
             next;
         }
-        
-        if ($which eq 'total') {
-            next unless $newline;
-            next if ($newline =~ /^(-----|Resid)/);
+        if ($newline =~ /Sidechain Energy Decomposition:/) {
+            $which .= 'sidechain';
+            next;
+        }
+        if ($which eq 'DELTASsidechain') {
+            unless ($newline) { # fine della sezione
+                $which = 'null';
+                next;
+            }
+            next if ($newline =~ /^(-----|Resid)/); # righe di intestazione
             my @splitted = unpack('Z9Z10Z22Z22Z22Z22Z22Z21', $newline);
             my ($i) = $splitted[0] =~ /(\d+) \|$/;
             my ($j) = $splitted[1] =~ /(\d+) \|$/;
             my ($value) = $splitted[7] =~ /([-\.\d]+) \+\/-/;
-            $total_matrix[$i-1][$j-1] = $value;
-        } else {
-            next;
+            $sidechain_matrix[$i-1][$j-1] = $value;
         }
     }
     
-    $totres = scalar @total_matrix;
+    $totres = scalar @sidechain_matrix;
     
     # "simmetrizzo" la matrice delle energie
     for my $i (0..$totres-1) {
         for my $j (0..$totres-1) {
-            if ($total_matrix[$i][$j] == $total_matrix[$j][$i]) {
+            if ($sidechain_matrix[$i][$j] == $sidechain_matrix[$j][$i]) {
                 next;
             } else {
-                my $ene1 = $total_matrix[$i][$j];
-                my $ene2 = $total_matrix[$j][$i];
+                my $ene1 = $sidechain_matrix[$i][$j];
+                my $ene2 = $sidechain_matrix[$j][$i];
                 my $ave = ($ene1 + $ene2) / 2;
                 $ave = sprintf("%.3f", $ave);
-                $total_matrix[$i][$j] = $ave;
-                $total_matrix[$j][$i] = $ave;
+                $sidechain_matrix[$i][$j] = $ave;
+                $sidechain_matrix[$j][$i] = $ave;
             }
         }
     }
@@ -274,34 +251,34 @@ INPUT: {
     for my $i (0..$totres-1) {
         for my $j (0..$totres-1) {
             if (abs($i - $j) <= $filter) {
-                $total_matrix[$i][$j] = '0.000';
-                $total_matrix[$j][$i] = '0.000';
-#             } elsif ($total_matrix[$i][$j] >= 0) { # filtro le interazioni destabilizzanti
-#                 $total_matrix[$i][$j] = '0.000';
+                $sidechain_matrix[$i][$j] = '0.000';
+                $sidechain_matrix[$j][$i] = '0.000';
+#             } elsif ($sidechain_matrix[$i][$j] >= 0) { # filtro le interazioni destabilizzanti
+#                 $sidechain_matrix[$i][$j] = '0.000';
             }
         }
     }
     
-    # scrivo le matrice su file
-    open(OUTT, '>' . "$workdir/BRENDA.IMATRIX.csv");
+    # scrivo la matrice su file
+    open(OUTS, '>' . "$workdir/BRENDA.SMATRIX.csv");
     for my $i (0..$totres-1) {
-        my $linet;
+        my $lines;
         for my $j (0..$totres-1) {
-            $linet .= sprintf("%.3f;", $total_matrix[$i][$j]);
+            $lines .= sprintf("%.3f;", $sidechain_matrix[$i][$j]);
         }
-        $linet =~ s/;$/\n/;
-        print OUTT $linet;
+        $lines =~ s/;$/\n/;
+        print OUTS $lines;
     }
-    close OUTT;
+    close OUTS;
     
     print "done\n";
 }
 
-DIAGONALLEY: { # diagonalizzo la matrice delle energie d'interazione
+DIAGONALLEY: {
     printf("%s diagonalizing interaction energy matrix...", clock());
     my $eval_file = "$workdir/_BRENDA.EVAL.dat";
     my $evect_file = "$workdir/_BRENDA.EVECT.dat";
-    my $mat_file = "$workdir/BRENDA.IMATRIX.csv";
+    my $mat_file = "$workdir/BRENDA.SMATRIX.csv";
     my $R_file = "$workdir/_BRENDA.pca.R";
     
     # creo lo script per R
@@ -325,7 +302,7 @@ ROGER
     print "done\n";
 }
 
-REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in questo caso sono gli autovettori associati agli autovalori più negativi)
+REVERSI: { # inverto l'ordine di autovalori e autovettori, i discriminanti in questo caso sono gli autovettori associati agli autovalori più negativi
     printf("%s reversing eigenlists...", clock());
     open(EVAL, '<' . "$workdir/_BRENDA.EVAL.dat");
     my @content = <EVAL>;
@@ -369,8 +346,8 @@ REVERSI: { # inverto l'ordine di autovalori e autovettori (i discriminanti in qu
     print "done\n";
 }
 
-CUMULVAR: { # raccolgo la varianza spiegata da ogni autovettore
-    my $mat_file = "$workdir/BRENDA.IMATRIX.csv";
+AUTOMAN: {
+    my $mat_file = "$workdir/BRENDA.SMATRIX.csv";
     my $R_file = "$workdir/_BRENDA.sdev.R";
     my $sdevtable = "$workdir/_BRENDA.CUMULATIVE.dat";
     
@@ -393,60 +370,39 @@ ROGER
     # lancio l'analisi PCA
     my $log = qx/cd $workdir;$bins{'R'} $R_file 2>&1/;
 #     print "\n<<$log>>"; # vedo cosa combina lo script
-}
 
-
-AUTOMAN: {
-    if ($auto eq '0') { 
-        @quali_evect = ( '0' );
-        printf("%s selected eigenvectors: 1\n", clock());
-    } elsif ($auto eq '1') {
-        printf("%s extracting significant eigenvectors...", clock());
-        my $cmd = <<ROGER
-cd $workdir;
-touch fort.35;
-cp _BRENDA.EVECT.dat fort.30
-cp _BRENDA.EVAL.dat fort.31
-echo '\$PARAMS  NRES=$totres FRACT=0.6 TOTAL=.TRUE. NTM=3 PERCOMP=0.5 NGRAIN=5 LENGTH=50 \$END' | $bins{'BLOCKS'} 2> BLOCKS.error;
-ROGER
-        ;
-        my $blocks_log = qx/$cmd/;
-        my ($match_string) = $blocks_log =~ m/ESSENTIAL CLUSTER OF EIGENVECTORS:\s+([\s\d]+)\n/m;
-        open(BLOCKS, '>' . "$workdir/_BRENDA.BLOCKS.log");
-        print BLOCKS $blocks_log;
-        close BLOCKS;
-        unless ($match_string) {
-            croak("\nE- forecasting error, please see _BRENDA.BLOCKS.log\n\t");
-        }
-        @quali_evect = split(/\s+/, $match_string);
-        print "done\n";
-        printf("%s selected eigenvectors: %s\n", clock(), join(' ',sort {$a <=> $b} @quali_evect));
-        @quali_evect = map { $_-1 } @quali_evect;
-        qx/rm -rfv fort.*/;
-        unlink "BLOCKS.error";
-    } elsif ($auto eq '2') {
-        open(TABLE, '<' . "$workdir/_BRENDA.CUMULATIVE.dat");
-        my @file_content = <TABLE>;
-        close TABLE;
-        shift @file_content; # rimuovo l'header
-        my $num = 0E0;
-        while (my $newline = shift @file_content) {
-            chomp $newline;
-            my @values = split(';', $newline);
-            my $cumul = sprintf("%.2f", $values[2]);
-            push(@quali_evect, $num);
-            $num++;
-            last if ($cumul > $varthres);
-        }
-        my @printo = map { $_+1 } @quali_evect;
-        printf("%s selected eigenvectors: %s\n", clock(), join(' ', @printo));
-    } else {
-        croak("\nE- unknown method chosen for selecting eigenvectors\n\t");
+    # leggo la tabella della varianza cumulata
+    open(TABLE, '<' . $sdevtable);
+    my @file_content = <TABLE>;
+    close TABLE;
+    shift @file_content; # rimuovo l'header
+    my $num = 0E0;
+    while (my $newline = shift @file_content) {
+        chomp $newline;
+        my @values = split(';', $newline);
+        my $cumul = sprintf("%.2f", $values[2]);
+        push(@quali_evect, $num);
+        $num++;
+        last if ($cumul > $varthres);
     }
+    my @printo = map { $_+1 } @quali_evect;
+    printf("%s selected eigenvectors: %s\n", clock(), join(' ', @printo));
 }
 
 ENEDIST: {
-    printf("%s generating hotspots profile...", clock());
+    my %ppi_interface;
+    if ($ppifile eq 'null') {
+        printf("%s generating hotspots profile, no PPI interface defined...", clock());
+    } else {
+        printf("%s generating hotspots profile, using <%s>...", clock(), $ppifile);
+        open(IN, '<' . $ppifile) or croak "E- unable to open <$ppifile> file \n\t";
+        while (my $newline = <IN>) {
+            chomp $newline;
+            $newline-- if (int $newline);
+            $ppi_interface{$newline} = 1;
+        }
+        close IN;
+    }
     
     # leggo la tabella della varianza cumulata
     open(TABLE, '<' . '_BRENDA.CUMULATIVE.dat');
@@ -466,20 +422,33 @@ ENEDIST: {
         my $score = $propvar[$av]; # varianza spiegata dall'autovettore $av
         my @components = @{$eigenvectors[$av]};
         
-        my $threshold = sqrt(1/$totres);
+        my @data;
+        if ($ppifile eq 'null') {
+            @data = @components;
+        } else {
+            for my $ppi (keys %ppi_interface) {
+                push(@data, $components[$ppi]);
+            }
+        }
+        @data = map(abs, @data);
+        my $stat = Statistics::Descriptive::Full->new();
+        $stat->add_data(@data);
+        my $ave = $stat->mean();
         
         for my $i (0..scalar(@components)-1) {
             $scores{$i} = 0E0 unless (exists $scores{$i});
             my $value = abs($components[$i]);
-            if ($value > $threshold) { # la componente ha un valore sopra la media
-                $scores{$i} += $score;
+            if ($value > $ave) { # la componente ha un valore sopra la media
+                if ($ppifile eq 'null' || exists $ppi_interface{$i}) {
+                    $scores{$i} += $score;
+                }
             }
         }
     }
     
     # leggo la matrice delle interazioni
     my @stable;
-    open(MATRIX, '<' . 'BRENDA.IMATRIX.csv');
+    open(MATRIX, '<' . 'BRENDA.SMATRIX.csv');
     @file_content = <MATRIX>;
     close MATRIX;
     for my $i (0..scalar(@file_content)-1) {
@@ -506,7 +475,7 @@ ENEDIST: {
     open(OUT, '>' . "$workdir/BRENDA.PROFILE.dat");
     print OUT $profile;
     close OUT;
-    
+
     print "done\n";
 }
 
@@ -514,7 +483,7 @@ GRAPHICS: {
     printf("%s generating graphs...", clock());
     
     # parso il file della matrice delle energie di interazione
-    open(IN, '<' . "$workdir/BRENDA.IMATRIX.csv");
+    open(IN, '<' . "$workdir/BRENDA.SMATRIX.csv");
     my @file_content = <IN>;
     close IN;
     my @enematrix;
@@ -535,7 +504,7 @@ GRAPHICS: {
         }
         $content .= "\n";
     }
-    open(OUT, '>' . "$workdir/_BRENDA.IMATRIX.dat");
+    open(OUT, '>' . "$workdir/_BRENDA.SMATRIX.dat");
     print OUT $content;
     close OUT;
     
@@ -547,18 +516,18 @@ GRAPHICS: {
         $content .= "\n";
     }
     
-    open(OUT, '>' . "$workdir/_BRENDA.IMATRIX.dat");
+    open(OUT, '>' . "$workdir/_BRENDA.SMATRIX.dat");
     print OUT $content;
     close OUT;
     
-    open(IN, '<' . "$workdir/_BRENDA.IMATRIX.dat");
+    open(IN, '<' . "$workdir/_BRENDA.SMATRIX.dat");
     $content = [ ];
     @{$content} =<IN>;
     close IN;
     
     my $gnuscript = <<ROGER
 set terminal png size 2400, 2400
-set output "BRENDA.IMATRIX.png"
+set output "BRENDA.SMATRIX.png"
 
 set multiplot
 
@@ -583,7 +552,7 @@ set mytics 10
 set xtics format " "
 set grid xtics lt 0 lw 1 lc rgb "black"
 set grid ytics lt 0 lw 1 lc rgb "black"
-splot "_BRENDA.IMATRIX.dat"
+splot "_BRENDA.SMATRIX.dat"
 
 unset pm3d
 
@@ -605,15 +574,13 @@ set xtics nomirror
 set xtics 10
 set mxtics 10
 set xtics format "%.0f"
-unset ytics
+unset ytics;
 set yrange [$maxprof:0]
 set grid xtics lt 0 lw 1 lc rgb "black"
 plot "BRENDA.PROFILE.dat" every ::1 using 1:2 with impulses lw 4 lt rgb "red", \\
      "BRENDA.PROFILE.dat" every ::1 using 1:3 with impulses lw 4 lt rgb "blue"
-
 ROGER
     ;
-    
     open(GPL, '>' . "$workdir/_BRENDA.gnuplot");
     print GPL $gnuscript;
     close GPL;

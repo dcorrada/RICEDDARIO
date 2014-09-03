@@ -8,8 +8,9 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release 14.8 *** (the official name of this release could be varied by changes in progress)
-- ISABEL: new release (14.7.a)
-- BRENDA: new release (14.7.b)
+- ISABEL: new release (14.7.b)
+- BRENDA: new release (14.8.a)
+- BRENDAppi: new release (14.8.a)
 - BLOCKS: new release (14.7)
 
 #### NUOVA PAGINA WIKI PER ISABEL/BRENDA #######################################
