@@ -1,8 +1,8 @@
 ********************************************************************************
 BLOCKS
-release 11.5
+release 14.7
 
-Copyright (c) 2011, Alessandro GENONI <ale.genoni@gmail.com>
+Copyright (c) 2014, Alessandro GENONI <ale.genoni@gmail.com>
 
 This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.

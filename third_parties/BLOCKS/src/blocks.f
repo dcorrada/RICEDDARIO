@@ -465,6 +465,10 @@ C
          end if
        end do
  344   continue
+       if (nam .eq. 1) then
+         write(6,*) 'ONLY 1 SELECTED EIGENVECTORS: ABORTING!'
+         call EXIT(1)
+       end if
        write(6,*) 'NUMBER OF SELECTED EIGENVECTORS: ',nam
        write(6,*)
        return
