@@ -1,0 +1,4 @@
+ ASL1       0 ( ( fillres within 5 ( mol.entry 2 ) ) AND NOT ( backbone ) )
+ ASL2 200.000 ( ( fillres within 5 ( mol.entry 2 ) ) AND ( backbone ) )
+ ASL2 500.000 ( ( fillres within 7 ( mol.entry 2 ) ) AND NOT ( fillres within 5 ( mol.entry 2 ) ) )
+ ASL2  -1.000 ( ( mol.entry 1 ) AND NOT ( fillres within 7 ( mol.entry 2 ) ) )
