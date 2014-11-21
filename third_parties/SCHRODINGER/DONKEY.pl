@@ -866,6 +866,15 @@ ROGER
         close INFILE;
         
         # lancio il rescoring
+        
+        # patch per forzare la planarità nei sistemi aromatici
+        my $magic_string;
+        if ($PLANARIZE) {
+            $magic_string = '-prime_opt PLANARITY_RESTRAINT=10';
+        } else {
+            $magic_string = '';
+        }
+        
         $cmdline = <<ROGER
 #!/bin/bash
 export SCHRODINGER=$schrodinger
