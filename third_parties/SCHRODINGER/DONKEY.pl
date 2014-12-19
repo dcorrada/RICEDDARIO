@@ -3,6 +3,9 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 14.12.a    - prime_mmgbsa job optimized (see STEP6 block)
+#                    - pdb format conversion during STEP0
+#
 # release 14.11.a    - initial release
 #
 # ##############################################################################
@@ -82,7 +85,7 @@ USAGE: {
     my $header = <<ROGER
 ********************************************************************************
 DONKEY - DON't use KnimE Yet
-release 14.11.a
+release 14.12.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -224,12 +227,58 @@ STEP1: {
     
     # copio i file di input
     copy("$sourcedir/$refstruct", $destdir);
+    
+    printf("\n%s parsing pdb files...", clock());
     foreach my $basename (keys %iofiles) {
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
+        my $filename = $iofiles{$basename};
+        open(INFILE, '<' . "$sourcedir/$iofiles{$basename}");
+        my @infilecontent = <INFILE>;
+        close INFILE;
+        my $outfilecontent = [ ];
+        foreach my $newline (@infilecontent) {
+            chomp $newline;
+            next unless ($newline =~ /^ATOM/);
+            my @splitted = unpack('Z6Z5Z1Z4Z1Z3Z1Z1Z4Z1Z3Z8Z8Z8Z6Z6Z4Z2Z2', $newline);
+            # le righe "ATOM" sono strutturate così:
+            #   [1]     Atom serial number
+            #   [3]     Atom name
+            #   [4]     Alternate location indicator
+            #   [5]     Residue name
+            #   [7]     Chain identifier
+            #   [8]     Residue sequence number
+            #   [9]     Code for insertion of residues
+            #   [11-13] XYZ coordinates
+            #   [14]    Occupancy volume
+            #   [15]    T-factor
+            push(@{$outfilecontent}, [ @splitted ]);
+        }
+        
+        open(OUTFILE, '>' . $iofiles{$basename});
+        my ($inc_atom, $inc_resi) = (1, 1);
+        my $current_res = $outfilecontent->[0][8];
+        foreach my $newline (@{$outfilecontent}) {
+            my $newer_res = $newline->[8];
+            unless ($newer_res eq $current_res) {
+                $inc_resi++;
+                $current_res = $newer_res;
+            }
+            
+            $newline->[1] = sprintf("% 5d",$inc_atom); # right justified format
+            $newline->[8] = sprintf("% 4d",$inc_resi); # right justified format
+            $newline->[7] = ' ';
+            
+            my $string = join('', @{$newline}) . "\n";
+            print OUTFILE $string;
+            
+            $inc_atom++; # aggiorno l'atom number
+        }
+        print OUTFILE "END\n";
+        close OUTFILE;
     }
+    print "done\n";
     
     # lancio il preparation wizard per ogni modello
-    printf("\n%s parsing models with PrepWizard\n", clock());
+    printf("\n%s preparing models with PrepWizard\n", clock());
     foreach my $basename (keys %iofiles) {
         # con il PrepWizard faccio:
         # -> allinemanto strutturale di ogni modello al complesso di riferimento (-reference_st_file)
@@ -848,17 +897,36 @@ STEP6: {
     
     # creo l'input file per Prime
     printf("\n%s MM-GBSA with Prime\n", clock());
+    
     foreach my $basename (keys %iofiles) {
-        my $incontent = <<ROGER
+        my $incontent;
+        
+        if ($PRIME_FREEZER) { # calcolo dell'energia on site, senza minimizzazioni
+            $incontent = <<ROGER
+STRUCT_FILE  minipostXP-$basename\_1_pv.maegz
+FROZEN
+ROGER
+            ;
+        } else {
+            $incontent = <<ROGER
 STRUCT_FILE  minipostXP-$basename\_1_pv.maegz
 JOB_TYPE     REAL_MIN
-RFLEXDIST    8
 OUT_TYPE     COMPLEX
+RFLEXDIST    7
+RFLEXGROUP   side
+RCONS        ((fillres within 7 (atom.i_psp_Prime_MMGBSA_Ligand 1)) AND NOT (fillres within 5 (atom.i_psp_Prime_MMGBSA_Ligand 1)))
+STR_CONS     120
+PRIME_OPT    MINIM_NITER         = 50
+PRIME_OPT    MINIM_NSTEP         = 200
+PRIME_OPT    MINIM_RMSG          = 0.01
+PRIME_OPT    MINIM_METHOD        = tn
 ROGER
-        ;
-        
-        if ($PRIME_FREEZER) {
-            $incontent .= "\nFROZEN\n";
+            ;
+            
+            if ($PLANARIZE) { # patch per forzare la planarità nei sistemi aromatici
+                $incontent .= 'PRIME_OPT    PLANARITY_RESTRAINT = 10';
+                $incontent .= "\n";
+            }
         }
         
         open(INFILE, '>' . "prime_mmgbsa-$basename.inp");
@@ -866,15 +934,6 @@ ROGER
         close INFILE;
         
         # lancio il rescoring
-        
-        # patch per forzare la planarità nei sistemi aromatici
-        my $magic_string;
-        if ($PLANARIZE) {
-            $magic_string = '-prime_opt PLANARITY_RESTRAINT=10';
-        } else {
-            $magic_string = '';
-        }
-        
         $cmdline = <<ROGER
 #!/bin/bash
 export SCHRODINGER=$schrodinger
