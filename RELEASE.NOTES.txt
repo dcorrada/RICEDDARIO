@@ -9,6 +9,7 @@ REMEMBER to read...
 
 *** release xx.yy ***
 - QUEST: added 'QUEST.kill.queued.pl' script to mass kill the queued jobs
+- PDB2CASTp.pl: updated URL of the CASTp webserver
 - DONKEY: new release (14.11.a)
 
 *** release 14.9 ***
