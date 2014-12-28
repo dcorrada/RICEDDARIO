@@ -3,6 +3,10 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 14.12.b    - shell option
+#                    - per-residue energy decomposition
+#                    - box plots of decomposed terms
+#
 # release 14.12.a    - prime_mmgbsa job optimized (see STEP6 block)
 #                    - pdb format conversion during STEP0
 #
@@ -38,6 +42,7 @@ use File::Copy;
 our $PLANARIZE = 0; # force aromatic rings to be planar, during post-docking minimization step (option avalaible only for ff OPLS_200X)
 our $PRIME_FREEZER = 0; # if enabled, force prime_mmgbsa to calculte energy without structure optimization
 our $JUMP = 'STEP1'; # force to (re)start the protocol from a specific step
+our $SHELL = 5.0; # shell by which residues will be considered during enedecomp analysis
 
 ## SGALF ##
 
@@ -53,6 +58,7 @@ our $sourcedir;
 our $destdir;
 
 # i vari programmi che verranno usati
+my $wheRe = qx/which R/; chomp $wheRe;
 our %bins = (
     'glide'             => $schrodinger . '/glide',
     'macromodel'        => $schrodinger . '/macromodel',
@@ -65,6 +71,8 @@ our %bins = (
     'pv_convert'        => $riceddario . '/third_parties/SCHRODINGER' .  '/pv_convert.py',
     'quest'             => $riceddario . '/Qlite' . '/QUEST.client.pl',
     'split_complexes'   => $riceddario . '/third_parties/SCHRODINGER' . '/split_complexes.py',
+    'enedecomp_parser'  => $riceddario . '/third_parties/SCHRODINGER' . '/enedecomp_parser.pl',
+    'R'                 => $wheRe
 );
 
 our $gridsize;
@@ -81,7 +89,7 @@ USAGE: {
     use Getopt::Long;no warnings;
     my $help;
     my $workflow;
-    GetOptions('planarize|p' => \$PLANARIZE, 'freeze|f' => \$PRIME_FREEZER, 'help|h' => \$help, 'jump|j=s' => \$JUMP);
+    GetOptions('planarize|p' => \$PLANARIZE, 'freeze|f' => \$PRIME_FREEZER, 'help|h' => \$help, 'jump|j=s' => \$JUMP, 'shell|s=f' => \$SHELL);
     my $header = <<ROGER
 ********************************************************************************
 DONKEY - DON't use KnimE Yet
@@ -123,6 +131,9 @@ version use OPLS_2005 as forcefield to perform the minimization steps.
                         minimization step, recommended if you have ligands with 
                         extended coniugated aromatic systems
     
+    -shell|s <float>    shell, in Angstrom, by which residues will be considered
+                        for energy decomposition analysis (default: 5.0 A)
+    
 *** INPUT FILES ***
     
     ----------------------------------------------------------------------------
@@ -160,6 +171,9 @@ READY2GO: {
             croak "\nE- file <$bins{$bin}> not found\n\t";
         }
     }
+    
+    # aggiorno il comando per lanciare R
+    $bins{'R'} .= ' --vanilla <';
     
     # verifico che il server QUEST sia su
     my $status = qx/$bins{'quest'} -l 2>&1/;
@@ -207,7 +221,7 @@ STEP1: {
         }
     }
     printf("\n%s SUMMARY CHECK\n", clock());
-    printf("\n    FLAG freeze........: %d\n\n    FLAG planarize.....: %d\n", $PRIME_FREEZER, $PLANARIZE);
+    printf("\n    FLAG freeze........: %d\n\n    FLAG planarize.....: %d\n\n    FLAG shell.........: %f\n", $PRIME_FREEZER, $PLANARIZE, $SHELL);
     printf("\n    ligands library....: %s\n\n    reference complex..: %s\n\n    input models.......:%s\n    substructure.......: %s\n\n    grid sizes.........: %s", $ligands, $refstruct, $mods, $substructure, $gridsize);
     print "\n\nInput files are alright? [Y/n] ";
     my $ans = <STDIN>;
@@ -1004,23 +1018,28 @@ STEP7: {
     opendir(DIR, $sourcedir);
     my @file_list = grep { /^prime_mmgbsa-(.*)-out\.maegz$/ } readdir(DIR);
     closedir DIR;
-    
-    printf("\n%s converting maegz files\n", clock());
-    my @mae_infiles;
+    printf("\n%s parsing maegz files\n", clock());
     foreach my $infile (@file_list) {
-        copy("$sourcedir/$infile", $destdir);
         my ($basename) = $infile =~ /prime_mmgbsa-(.+)-out\.maegz/;
-        print "    $basename...";
-        $cmdline = "$bins{'structconvert'} -imae $infile -omae $basename.mae";
-        qx/$cmdline/;
-        push(@mae_infiles, "$basename.mae");
-        unlink $infile;
-        print "done\n";
+        copy("$sourcedir/$infile", "$destdir/$basename.maegz");
+        $cmdline = <<ROGER
+#!/bin/bash
+
+cd $destdir;
+$bins{'enedecomp_parser'} $basename.maegz -shell $SHELL
+ROGER
+        ;
+        quelo($cmdline, $basename);
     }
     
-    printf("\n%s parsing mae files\n", clock());
+    job_monitor($destdir);
+    
+    opendir(DIR, $destdir);
+    @file_list = grep { /\.mae$/ } readdir(DIR);
+    closedir DIR;
+    printf("\n%s grouping poses per ligand\n", clock());
     my %ligposes;
-    foreach my $infile (@mae_infiles) {
+    foreach my $infile (@file_list) {
         my $ligand_line;
         open(MAE, '<' . $infile);
         while (my $newline = <MAE>) {
@@ -1043,19 +1062,98 @@ STEP7: {
         }
         close MAE;
     }
-    
-    printf("\n%s grouping poses per ligand\n", clock());
     foreach my $ligand (keys %ligposes) {
         print "    $ligand...";
         my $maelist = join(' ', @{$ligposes{$ligand}});
-        $cmdline = <<ROGER
-cat $maelist | gzip -c > $ligand.maegz;
-rm -f $maelist;
-ROGER
-        ;
+        $cmdline = "cat $maelist | gzip -c > ligand_$ligand.maegz";
         qx/$cmdline/;
         print "done\n";
     }
+    
+    # ripulisco la cartella dai file mae intermedi
+    while (my $mae = shift @file_list) {
+        qx/rm $mae*/;
+    }
+    
+    printf("\n%s summary of dG components\n", clock());
+    # reinizializzo la lista dei file di input
+    opendir(DIR, $destdir);
+    @file_list = grep { /\.csv$/ } readdir(DIR);
+    closedir DIR;
+    
+    my $csv_summary = { };
+    my @pose_list;
+    foreach my $infile (@file_list) {
+        my ($pose) = $infile =~ /(.+)\.csv$/;
+        push(@pose_list, $pose);
+        open(CSV, '<' . $infile);
+        my $newline = <CSV>; # salto la prima riga d'intestazione
+        while ($newline = <CSV>) {
+            chomp $newline;
+            my @values = split(';', $newline);
+            my $resi = sprintf("%04d", $values[0]);
+            $csv_summary->{$resi} = { }
+                unless (exists $csv_summary->{$resi});
+            $csv_summary->{$resi}->{$pose} = [ $values[4], $values[6], $values[7], $values[8] ];
+        }
+        close CSV;
+    }
+    
+    my %outfile = ('Coulomb' => '0', 'VdW' => '1', 'Lipo' => '2', 'SolvGB' => '3');
+    foreach my $filename (keys %outfile) {
+        print "    $filename term...";
+        open(CSV, '>' . 'enedecomp_' . $filename . '.csv');
+        my $header = 'POSE;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
+        print CSV $header;
+        foreach my $pose (@pose_list) {
+            my $row = $pose;
+            foreach my $resi (sort keys %{$csv_summary}) {
+                if (exists $csv_summary->{$resi}->{$pose}) {
+                    $row .= ';' . $csv_summary->{$resi}->{$pose}->[$outfile{$filename}];
+                } else {
+                    $row .= ';NA';
+                }
+            }
+            $row .= "\n";
+            print CSV $row;
+        }
+        close CSV;
+        print "done\n";
+    }
+    
+    printf("\n%s creating box plots...", clock());
+    my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_Lipo.csv", "enedecomp_SolvGB.csv"';
+    my $outlist = '"enedecomp_Coulomb.tiff", "enedecomp_VdW.tiff", "enedecomp_Lipo.tiff", "enedecomp_SolvGB.tiff"';
+    my $scRipt = <<ROGER
+whiskers<-function(infile,outfile) {
+    input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";", row.names = 1);
+    colcol = c();
+    for (i in 1:length(input.table)) {
+        if(any(is.na(input.table[,i]))) {
+            colcol = c(colcol, "red");
+        } else {
+            colcol = c(colcol, "blue");
+        }
+    }
+    tiff(filename = outfile,  width = 1280, height = 800, compression = "lzw")
+    boxplot(input.table, notch = FALSE, las = 2, col = colcol);
+    dev.off();
+}
+
+inlist = c($inlist);
+outlist = c($outlist);
+for (i in 1:length(inlist)) {
+    cat(inlist[i],outlist[i],"\n");
+    whiskers(inlist[i],outlist[i]);
+}
+ROGER
+    ;
+    open(R, '>' . 'boxplot.R');
+    print R $scRipt;
+    close R;
+    qx/$bins{'R'} boxplot.R/;
+    print "done\n";
+
 }
 
 FINE: {
