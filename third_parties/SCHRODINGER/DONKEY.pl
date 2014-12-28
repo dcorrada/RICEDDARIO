@@ -172,6 +172,9 @@ READY2GO: {
         }
     }
     
+    # aggiorno il comando per lanciare R
+    $bins{'R'} .= ' --vanilla <';
+    
     # verifico che il server QUEST sia su
     my $status = qx/$bins{'quest'} -l 2>&1/;
     if ($status =~ /E\- Cannot open socket/) {
