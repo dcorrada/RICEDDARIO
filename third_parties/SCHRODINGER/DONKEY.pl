@@ -36,6 +36,7 @@ use Data::Dumper;
 use Cwd;
 use Carp;
 use File::Copy;
+use Statistics::Descriptive;
 
 ## FLAGS ##
 
@@ -1026,7 +1027,8 @@ STEP7: {
 #!/bin/bash
 
 cd $destdir;
-$bins{'enedecomp_parser'} $basename.maegz -shell $SHELL
+$bins{'enedecomp_parser'} $basename.maegz -shell $SHELL;
+rm $basename.maegz
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -1058,7 +1060,6 @@ ROGER
                 }
                 last;
             }
-            $ligand_line = $newline;
         }
         close MAE;
     }
@@ -1068,11 +1069,6 @@ ROGER
         $cmdline = "cat $maelist | gzip -c > ligand_$ligand.maegz";
         qx/$cmdline/;
         print "done\n";
-    }
-    
-    # ripulisco la cartella dai file mae intermedi
-    while (my $mae = shift @file_list) {
-        qx/rm $mae*/;
     }
     
     printf("\n%s summary of dG components\n", clock());
@@ -1099,17 +1095,29 @@ ROGER
         close CSV;
     }
     
+    my %pose2lig;
+    foreach my $ligand (keys %ligposes) {
+        foreach my $mae (@{$ligposes{$ligand}}) {
+            my ($pose) = $mae =~ /(.+)\.mae$/;
+            $pose2lig{$pose} = $ligand;
+        }
+    }
+    
     my %outfile = ('Coulomb' => '0', 'VdW' => '1', 'Lipo' => '2', 'SolvGB' => '3');
     foreach my $filename (keys %outfile) {
         print "    $filename term...";
         open(CSV, '>' . 'enedecomp_' . $filename . '.csv');
-        my $header = 'POSE;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
+        my $header = 'POSE;LIGAND;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
         print CSV $header;
+        my %resi_values;
         foreach my $pose (@pose_list) {
-            my $row = $pose;
+            my $row = $pose . ';' . $pose2lig{$pose};
             foreach my $resi (sort keys %{$csv_summary}) {
+                $resi_values{$resi} = [ ] unless (exists $resi_values{$resi});
                 if (exists $csv_summary->{$resi}->{$pose}) {
-                    $row .= ';' . $csv_summary->{$resi}->{$pose}->[$outfile{$filename}];
+                    my $value = $csv_summary->{$resi}->{$pose}->[$outfile{$filename}];
+                    $row .= ';' . $value;
+                    push(@{$resi_values{$resi}}, $value);
                 } else {
                     $row .= ';NA';
                 }
@@ -1117,26 +1125,53 @@ ROGER
             $row .= "\n";
             print CSV $row;
         }
+        
+        # calcolo i range interquartile per ogni residuo
+        my %resi_stats;
+        foreach my $key (sort keys %resi_values) {
+            my $stat = Statistics::Descriptive::Full->new();
+            $stat->add_data(@{$resi_values{$key}});
+            my ($q1, $q2, $q3) = ($stat->quantile(1), $stat->quantile(2), $stat->quantile(3));
+            my $iqr = $q3 -$q1;
+            my $lower = $q1 - (1.5 * $iqr);
+            my $upper = $q3 + (1.5 * $iqr);
+            $resi_stats{$key} = [ $lower, $q1, $q2, $q3, $upper ];
+        }
+        
+        my %statlabels = ('0' => 'LOWER', '1' => 'Q1', '2' =>  'Q2', '3' => 'Q3', '4' => 'UPPER');
+        foreach my $statlabel (sort keys %statlabels) {
+            my $row = ';' . $statlabels{$statlabel};
+            foreach my $resi (sort keys %resi_stats) {
+                $row .= sprintf(";%.3f", $resi_stats{$resi}->[$statlabel]);
+            }
+            $row .= "\n";
+            print CSV $row;
+        }
+        
         close CSV;
         print "done\n";
     }
     
+    my $tot_records = scalar @pose_list;
+    
     printf("\n%s creating box plots...", clock());
     my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_Lipo.csv", "enedecomp_SolvGB.csv"';
-    my $outlist = '"enedecomp_Coulomb.tiff", "enedecomp_VdW.tiff", "enedecomp_Lipo.tiff", "enedecomp_SolvGB.tiff"';
+    my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_Lipo.png", "enedecomp_SolvGB.png"';
     my $scRipt = <<ROGER
 whiskers<-function(infile,outfile) {
-    input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";", row.names = 1);
+    input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";");
+    input.subset = input.table[1:$tot_records,3:ncol(input.table)]
     colcol = c();
-    for (i in 1:length(input.table)) {
-        if(any(is.na(input.table[,i]))) {
+    for (i in 1:length(input.subset)) {
+        if(any(is.na(input.subset[,i]))) {
             colcol = c(colcol, "red");
         } else {
             colcol = c(colcol, "blue");
         }
     }
-    tiff(filename = outfile,  width = 1280, height = 800, compression = "lzw")
-    boxplot(input.table, notch = FALSE, las = 2, col = colcol);
+    png(filename = outfile,  width = 1280, height = 800)
+    boxplot(input.subset, notch = FALSE, las = 2, col = colcol);
+    abline(h = 0, lty = 2);
     dev.off();
 }
 
@@ -1153,7 +1188,19 @@ ROGER
     close R;
     qx/$bins{'R'} boxplot.R/;
     print "done\n";
-
+    
+    opendir(DIR, $destdir);
+    @file_list = grep { /-complex-/ } readdir(DIR);
+    closedir DIR;
+    printf("\n%s compressing intermediate files\n", clock());
+    my $tozip = 'boxplot.R ' . join(' ', @file_list);
+    $cmdline = <<ROGER
+cd $destdir;
+tar -c $tozip | gzip -c9 > intermediate.tar.gz;
+rm -rfv $tozip;
+ROGER
+    ;
+    qx/$cmdline/;
 }
 
 FINE: {
