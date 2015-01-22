@@ -1,6 +1,13 @@
 #!/usr/bin/perl
 # -d
 
+# ########################### RELEASE NOTES ####################################
+#
+# release 15.01.a    - initial release
+#
+# ##############################################################################
+
+
 use strict;
 use warnings;
 
@@ -241,13 +248,13 @@ DISTANCE: { # calcolo quanto ogni residuo è distante dal ligando
 OUTFILE: { # scrivo il csv filtrato sulla shell
     printf("\n%s writing output file\n", clock());
     open(CSV, '>' . "$basename.csv");
-    my @cols = ('resn','dG(NS)','Hbond','Coulomb','Packing','vdW','Lipo','Solv_GB','Covalent','SelfCont');
-    my $header = sprintf("resi;%s\n", join(';',@cols));
+    my @cols = ('dG(NS)','Hbond','Coulomb','Packing','vdW','Lipo','Solv_GB','Covalent','SelfCont');
+    my $header = sprintf("resi;resn;dist;%s\n", join(';',@cols));
     print CSV $header;
     foreach my $key (sort keys %{$distances}) {
         if ($distances->{$key} < $shell) {
             my ($resnum) = $key =~ /^REC_0*(\d+)$/;
-            my $row = "$resnum";
+            my $row = sprintf("%s;%s;%.3f", $resnum, $parsed_mae->{$key}->{'resn'}, $distances->{$key});
             foreach my $col (@cols) {
                 my $value = $parsed_mae->{$key}->{$col};
                 $value = sprintf("%.3f", $value)
