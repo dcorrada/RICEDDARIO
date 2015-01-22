@@ -31,7 +31,8 @@ use MIME::Parser;
 our $homedir = $ENV{HOME};
 our $workdir = getcwd();
 our $proberad = 1.4; # probe radius, in Angstrom
-our $castp_url = 'http://cast.engr.uic.edu/castp/advcal.php';
+our $castp_dom = 'http://sts.bioe.uic.edu/castp';
+our $castp_url = $castp_dom . '/advcal.php';
 our %email;
 our @pdb_list;
 our $hetatom;
@@ -219,7 +220,7 @@ REQUEST: { # sottomissione al server
             # CASTp passa per una pagina intermedia in cui chiede conferma per la
             # selezione di catene e ligandi, di default lacio che processi tutto
             my ($hetpath) = $request->{'_headers'}->{'location'} =~ m/^\.(.*)/;
-            $hetpath = "http://cast.engr.uic.edu/castp" . $hetpath;
+            $hetpath = $castp_dom . $hetpath;
             my $get_page = $bot->get($hetpath);
             my %params;
             foreach my $newline (split('\n', $get_page->content)) {
@@ -230,7 +231,7 @@ REQUEST: { # sottomissione al server
                 }
             }
             $params{'pdbid'} = '';
-            $request = $bot->post( 'http://cast.engr.uic.edu/castp/modify_file.php',
+            $request = $bot->post( "$castp_dom/modify_file.php",
                 Content_type => 'multipart/form-data',
                 Content => [ %params ]
             );
@@ -253,7 +254,7 @@ REQUEST: { # sottomissione al server
         }
         # Una volta sottomesso un job il server CASTp butta fuori una pagina di notifica, che deve essere caricata il job venga sottomesso
         my ($token) = $request->{'_headers'}->{'location'} =~ m/^\.(.*)/;
-        $token = "http://cast.engr.uic.edu/castp" . $token;
+        $token = $castp_dom . $token;
         my $get_token = $bot->get($token);
         unless ($hetatom) {
             ($jobid) = $token =~ m/uploads\/(\w*)&/;
