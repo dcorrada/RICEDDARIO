@@ -1055,6 +1055,8 @@ ROGER
                     $ligand_line = <MAE>;
                     $ligand_line =~ s/^ :://; # il nome del ligando ha solitamente questo prefisso nel file mae
                     $ligand_line =~ s/[\n :"\\\/]//g;
+                    $ligand_line =~ s/\(/[/g;
+                    $ligand_line =~ s/\)/]/g;
                 }
                 if (exists $ligposes{$ligand_line}) {
                     push(@{$ligposes{$ligand_line}}, $infile);
