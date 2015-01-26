@@ -3,6 +3,9 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.01.a    - modified summary csv and boxplots on STEP7
+#                    - added timelog
+#
 # release 14.12.b    - shell option
 #                    - per-residue energy decomposition
 #                    - box plots of decomposed terms
@@ -94,7 +97,7 @@ USAGE: {
     my $header = <<ROGER
 ********************************************************************************
 DONKEY - DON't use KnimE Yet
-release 14.12.a
+release 15.01.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -1079,6 +1082,7 @@ ROGER
     @file_list = grep { /\.csv$/ } readdir(DIR);
     closedir DIR;
     
+    # faccio un hash di riepilogo dei csv prodotti da enedecomp_parser.pl
     my $csv_summary = { };
     my @pose_list;
     foreach my $infile (@file_list) {
@@ -1092,7 +1096,11 @@ ROGER
             my $resi = sprintf("%04d", $values[0]);
             $csv_summary->{$resi} = { }
                 unless (exists $csv_summary->{$resi});
-            $csv_summary->{$resi}->{$pose} = [ $values[4], $values[6], $values[7], $values[8] ];
+            my $dg_tot = $values[3];
+            my $coulomb = $values[4] + $values[5] + $values[11]; # Hbond + Coulomb + SelfCont
+            my $vdw = $values[6] + $values[7]; # Packing + vdW
+            my $solv = $values[8] + $values[9]; # Lipo + SolvGB
+            $csv_summary->{$resi}->{$pose} = [ $dg_tot, $coulomb, $vdw, $solv ];
         }
         close CSV;
     }
@@ -1105,7 +1113,20 @@ ROGER
         }
     }
     
-    my %outfile = ('Coulomb' => '0', 'VdW' => '1', 'Lipo' => '2', 'SolvGB' => '3');
+    # filtro solo i residui condivisi almeno dal $ratio delle pose
+    my $ref = scalar keys %pose2lig;
+    my $ratio = 0.75;
+#     printf("    Entries parsed.....: %d\n", scalar keys %{$csv_summary});
+    foreach my $res (keys %{$csv_summary}) {
+        my $tot = scalar keys %{$csv_summary->{$res}};
+        if ($tot <= ($ref * $ratio)) {
+            delete $csv_summary->{$res};
+        }
+    }
+#     printf("    Entries filtered...: %d\n", scalar keys %{$csv_summary});
+    
+    # Scrivo il csv di riepilogo
+    my %outfile = ('dG' => '0', 'Coulomb' => '1', 'VdW' => '2', 'Solv' => '3');
     foreach my $filename (keys %outfile) {
         print "    $filename term...";
         open(CSV, '>' . 'enedecomp_' . $filename . '.csv');
@@ -1141,6 +1162,8 @@ ROGER
         }
         
         my %statlabels = ('0' => 'LOWER', '1' => 'Q1', '2' =>  'Q2', '3' => 'Q3', '4' => 'UPPER');
+        my $separator = ';' x 3 . ";\n";
+        print CSV $separator;
         foreach my $statlabel (sort keys %statlabels) {
             my $row = ';' . $statlabels{$statlabel};
             foreach my $resi (sort keys %resi_stats) {
@@ -1157,8 +1180,8 @@ ROGER
     my $tot_records = scalar @pose_list;
     
     printf("\n%s creating box plots...", clock());
-    my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_Lipo.csv", "enedecomp_SolvGB.csv"';
-    my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_Lipo.png", "enedecomp_SolvGB.png"';
+    my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_dG.csv", "enedecomp_Solv.csv"';
+    my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_dG.png", "enedecomp_Solv.png"';
     my $scRipt = <<ROGER
 whiskers<-function(infile,outfile) {
     input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";");
