@@ -101,6 +101,17 @@ Finally, the option `-s` must be specified during the job submission:
 
     $ QUEST.client.pl -s mmgbsa.00001.sh
 
+**NOTE:** the option `-s` is deprecated, where possible Schrodinger jobs sould be run with `NOJOBID` flag. The following script does not need the use of `-s` option:
+
+    #!/bin/sh
+
+    # export the environment vars
+    export SCHRODINGER=/usr/local/schrodinger_2012
+    export LM_LICENSE_FILE=62158@192.168.1.4
+
+    # launch the job
+    $SCHRODINGER/prime_mmgbsa mmgbsa.00001.maegz -NOJOBID
+
 ## 4. MANAGING YOUR JOBS
 You can monitor the status of the server every time with the following command:
 
@@ -144,7 +155,7 @@ You can kill your running/queued jobs every time with `-k` option:
 
     $ QUEST.client.pl -k 0Y01628R
 
-**NOTE:** killing Schrodinger jobs from QUEST (while they are running) is unsafe. As a result the following message will be displayed:
+**NOTE:** killing Schrodinger jobs (ie those shell scripts launched with `-s` option) is not managed by QUEST. As a result the following message will be displayed:
 
     REJECTED: try to use the following commad
 
