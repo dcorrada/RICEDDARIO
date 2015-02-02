@@ -7,6 +7,14 @@ REMEMBER to read...
 
 ...before merging to 'master' branch
 
+*** release 15.02 ***
+- QUEST: added 'QUEST.kill.queued.pl' script to mass kill the queued jobs
+- PDB2CASTp.pl: updated URL of the CASTp webserver
+- DONKEY: initial release (15.01.a)
+- enedecomp_parser.pl: initial release (15.01.a)
+- RankPride.pl: initial release (15.02.a)
+- RankPride.PRIME.pl: initial release (15.02.a)
+
 *** release 14.9 ***
 - ISABEL: new release (14.7.b)
 - BRENDA: new release (14.8.a)

@@ -71,9 +71,9 @@ OPTIONS
 
   -d <jobid>            details of a job
 
-  -s                    specify that the job comes from Schrondinger Suite, 
-                        please read the README.txt file in order to write a 
-                        correct script file
+  -s                    (DEPRECATED) specify that the job comes from 
+                        Schrondinger Suite, please read the README.txt file in 
+                        order to write a correct script file
 
   -q <fast|slow>        specify the queue type, "fast" jobs have priority over 
                         "slow" jobs(default: slow)

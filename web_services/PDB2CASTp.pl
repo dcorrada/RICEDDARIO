@@ -31,7 +31,8 @@ use MIME::Parser;
 our $homedir = $ENV{HOME};
 our $workdir = getcwd();
 our $proberad = 1.4; # probe radius, in Angstrom
-our $castp_url = 'http://sts.bioengr.uic.edu/castp/advcal.php';
+our $castp_dom = 'http://sts.bioe.uic.edu/castp';
+our $castp_url = $castp_dom . '/advcal.php';
 our %email;
 our @pdb_list;
 our $hetatom;
@@ -39,7 +40,7 @@ our $hetatom;
 
 USAGE: {
     print "*** PDB2CASTp ***\n";
-    
+
     my $help;
     use Getopt::Long;no warnings;
     GetOptions('h' => \$help, 'p=f{1}' => \$proberad, 'l' => \$hetatom);
@@ -56,7 +57,7 @@ This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 ********************************************************************************
 
-    This script submit in batch a list of PDB files (stored in pwd path) to 
+    This script submit in batch a list of PDB files (stored in pwd path) to
     CASTp server.
 
 SYNOPSYS
@@ -64,71 +65,71 @@ SYNOPSYS
     PDB2CASTp.pl [option] submit|fetch [mail.conf]
 
 CONF FILE
-    
+
     Required both in submit and fetch mode, the conf file must be compiled as
     in the following example:
-    
+
         address   = foo\@bar.com,
         username  = foo,
         password  = baz,
         server    = imap.bar.com,
         port      = 993'
-    
+
 MODES
-    
+
     submit      batch submission of a list of PDB files (stored in pwd path)
-    
+
     fetch       access an IMAP mail-server and download the messages sent from
                 CASTp server
-    
+
 OPTIONS
-    
-    -p <float>  [submit mode] probe radius, CASTp server accepts only values 
+
+    -p <float>  [submit mode] probe radius, CASTp server accepts only values
                 between 0.0 and 10.0 Angstrom (default: 1.4)
-    
+
     -l          [submit mode] include HET groups in the calculation and run
                 calculations, the PDB input files must contain the HET flags for
                 each heteroatom to be considered (see NOTES)
-    
+
 NOTES
-    The HET flags have to be edited with the following format, according to the 
+    The HET flags have to be edited with the following format, according to the
     PDB format description guide v3.30:
-    
+
     ----------------------------------------------------------------------------
     COLUMNS         DATA TYPE       FIELD           DEFINITION
     ----------------------------------------------------------------------------
     1 - 6           String(6)       Record name     "HET", left justified
-    
-    8 - 10          String(3)       hetID           Het identifier, right 
+
+    8 - 10          String(3)       hetID           Het identifier, right
                                                     justified
-    
+
     13              Character       ChainID         Chain identifier
-    
+
     14 - 17         Integer         seqNum          Sequence number, right
                                                     justified
-    
+
     18              AChar           iCode           Insertion code
-    
+
     21 - 25         Integer         numHetAtoms     Number of HETATM records,
                                                     left justified
-    
+
     31 - 70         String          text            Text describing Het group,
                                                     left justified
     ----------------------------------------------------------------------------
-    
+
     Just below an example of string, '.' are space characters:
-    
+
         HET....UNK..C.470...22........dioxine................................
 END
     ;
-    
+
     $help and do { print $usage; goto FINE; };
 }
 
 INIT: {
     my $mode = $ARGV[0];
     my $conf_file = $ARGV[1];
-    
+
     if ($conf_file) {
         open(CONF, '<' . $conf_file) or croak("E- unable to open <$conf_file>\n\t");
         while (my $newline = <CONF>) {
@@ -168,7 +169,7 @@ INIT: {
         }
         close CONF;
     }
-    
+
     unless ($mode) {
         print "\nnothing to do, aborting";
         goto FINE;
@@ -219,7 +220,7 @@ REQUEST: { # sottomissione al server
             # CASTp passa per una pagina intermedia in cui chiede conferma per la
             # selezione di catene e ligandi, di default lacio che processi tutto
             my ($hetpath) = $request->{'_headers'}->{'location'} =~ m/^\.(.*)/;
-            $hetpath = "http://sts.bioengr.uic.edu/castp" . $hetpath;
+            $hetpath = $castp_dom . $hetpath;
             my $get_page = $bot->get($hetpath);
             my %params;
             foreach my $newline (split('\n', $get_page->content)) {
@@ -230,7 +231,7 @@ REQUEST: { # sottomissione al server
                 }
             }
             $params{'pdbid'} = '';
-            $request = $bot->post( 'http://sts.bioengr.uic.edu/castp/modify_file.php',
+            $request = $bot->post( "$castp_dom/modify_file.php",
                 Content_type => 'multipart/form-data',
                 Content => [ %params ]
             );
@@ -253,7 +254,7 @@ REQUEST: { # sottomissione al server
         }
         # Una volta sottomesso un job il server CASTp butta fuori una pagina di notifica, che deve essere caricata il job venga sottomesso
         my ($token) = $request->{'_headers'}->{'location'} =~ m/^\.(.*)/;
-        $token = "http://sts.bioengr.uic.edu/castp" . $token;
+        $token = $castp_dom . $token;
         my $get_token = $bot->get($token);
         unless ($hetatom) {
             ($jobid) = $token =~ m/uploads\/(\w*)&/;
