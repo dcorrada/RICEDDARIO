@@ -7,6 +7,8 @@ REMEMBER to read...
 
 ...before merging to 'master' branch
 
+*** release XX.YY ***
+
 *** release 15.02 ***
 - QUEST: added 'QUEST.kill.queued.pl' script to mass kill the queued jobs
 - PDB2CASTp.pl: updated URL of the CASTp webserver
