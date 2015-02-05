@@ -83,8 +83,8 @@ define the free energy of binding of a specific receptor::ligand complex.
 Input files are pose viewer files (in maegz format), each of them must contains 
 a single pose. Such files are obtained from <prime_mmgbsa> job runs.
 
-Prior to launch the FURANO script the input files must be moved in two folders 
-defining the "REFERENCE" and the "QUERY" complexes, respectively.
+Prior to launch the script the input files must be moved in two folders defining
+the "REFERENCE" and the "QUERY" complexes, respectively.
 
 
 *** OPTIONS ***
