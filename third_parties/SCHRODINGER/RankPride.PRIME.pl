@@ -216,13 +216,13 @@ RANKPROD: {
     
     # preparo l'hash di input
     my $intable = { };
-    my %infiles = (
+    my %incsv = (
         'REFERENCE'  => 'enedecomp_REFERENCE.csv',
         'QUERY'      => 'enedecomp_QUERY.csv'
     );
-    for my $dataset (keys %infiles) {
+    for my $dataset (keys %incsv) {
         $intable->{$dataset} = { };
-        open(CSV, '<' . $infiles{$dataset});
+        open(CSV, '<' . $incsv{$dataset});
         my $header = <CSV>;
         chomp $header;
         my @probe_names = split(';', $header);
