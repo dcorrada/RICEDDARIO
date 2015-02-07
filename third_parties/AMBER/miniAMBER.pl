@@ -1,6 +1,15 @@
 #!/usr/bin/perl
 # -d
 
+# ########################### RELEASE NOTES ####################################
+#
+# release 14.05.a        - initial release
+#
+# release 15.02.a        - save intermediate non-solvated parm files
+#                        - added 'drms = 0.01' to minimization steps
+#
+# ##############################################################################
+
 use strict;
 use warnings;
 use Carp;
@@ -47,7 +56,7 @@ USAGE: {
     my $usage = <<END
 ********************************************************************************
 miniAMBER
-release 14.5.a
+release 15.02.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -56,7 +65,7 @@ Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 ********************************************************************************
 
 This script is aimed to perform all the preparatory steps in order to set up a 
-classical full atom moleclular dynamics in explicit solvent (ie protein, also 
+classical full atom molecular dynamics in explicit solvent (ie protein, also 
 with a small molecule ligand, plus TIP3P water and counterions in a 10A 
 truncated octahedron box).
 
@@ -170,7 +179,7 @@ END
     # boxtype
     if ($boxtype eq "oct") {
         $boxtype = 'solvateOct';
-    } elsif ($boxtype eq "oct") {
+    } elsif ($boxtype eq "cubic") {
         $boxtype = 'solvateBox';
     } else {
         croak "\nE- boxtype [$boxtype] unkown\n\t";
@@ -200,6 +209,7 @@ source leaprc.ff99SB                                    # load AMBER force field
 source leaprc.gaff                                      # load GAFF forcefield
 REC = loadpdb $ARGV[0]                                  # load molecule (processed with PDB4AMBER.pl)
 check REC                                               # check unit for internal inconsistencies
+saveamberparm REC rec.prmtop rec.inpcrd
 $boxtype REC TIP3PBOX 10.0                            # solvating box
 addIons REC Na+ 0                                       # add counterions
 addIons REC Cl- 0                                       # add counterions
@@ -225,6 +235,7 @@ LIG = loadmol2 $ligprefix.mol2                          # load molecule (process
 check LIG                                               # check unit for internal inconsistencies
 loadamberparams $ligprefix.frcmod                       # load extensions to GAFF forcefield (processed with parmcheck)
 saveOff LIG vacuo.lig.lib                               # save vacuo UNITs and PARMSETs to a Object File Format (off) file
+saveamberparm LIG lig.prmtop lig.inpcrd
 $boxtype LIG TIP3PBOX 10.0                            # solvating box
 addIons LIG Na+ 0                                       # add counterions
 addIons LIG Cl- 0                                       # add counterions
@@ -250,6 +261,7 @@ loadoff vacuo.lig.lib                                   # load Object file for l
 REC = loadpdb $ARGV[0]                                  # load receptor (processed with PDB4AMBER.pl)
 LIG = loadmol2 $ligprefix.mol2                          # load ligand (processed with antechamber)
 COM = combine {REC LIG}                                 # complexing receptor and ligand
+saveamberparm COM com.prmtop com.inpcrd
 $boxtype COM TIP3PBOX 10.0                            # solvating box
 addIons COM Na+ 0                                       # add counterions
 addIons COM Cl- 0                                       # add counterions
@@ -288,6 +300,7 @@ Minimisation: backbone w/ position restraints (500 kcal/molA)
  imin = 1,
  maxcyc = 2000,
  ncyc = 500,
+ drms = 0.01,
  ntb = 1,
  ntr = 1,
  restraint_wt = 500.0,
@@ -313,6 +326,7 @@ Minimisation: backbone and ligand w/ position restraints (500 kcal/molA)
  imin = 1,
  maxcyc = 2000,
  ncyc = 500,
+ drms = 0.01,
  ntb = 1,
  ntr = 1,
  restraint_wt = 500.0,
@@ -337,6 +351,7 @@ Minimisation: ligand w/ position restraints (500 kcal/molA)
  imin = 1,
  maxcyc = 2000,
  ncyc = 500,
+ drms = 0.01,
  ntb = 1,
  ntr = 1,
  restraint_wt = 500.0,
