@@ -8,6 +8,10 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+- miniAMBER: new release (15.02.a)
+- PDB4AMBER: minor bugfix
+- MM-GBSA_PPI: initial release (15.02.a)
+- RankPride.AMBER.PPI: initial release (15.02.a)
 
 *** release 15.02 ***
 - QUEST: added 'QUEST.kill.queued.pl' script to mass kill the queued jobs
