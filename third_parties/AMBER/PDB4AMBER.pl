@@ -62,7 +62,7 @@ CORE: {
         croak "E- unable to read [$ARGV[0]]\n\t";
     while (my $newline = <PDBIN>) {
         chomp $newline;
-        if ($newline =~ /^(TITLE|MODEL)/) {
+        if ($newline =~ /^(TITLE|MODEL|EXPDTA|REMARK)/) {
             $header .= "$newline\n";
         } elsif ($newline =~ /^ATOM/) { # parso solo le linee dei residui proteici (flag "ATOM")
             my @splitted = unpack('Z6Z5Z1Z4Z1Z3Z1Z1Z4Z1Z3Z8Z8Z8Z6Z6Z4Z2Z2', $newline);
@@ -268,13 +268,13 @@ CORE: {
     $filename =~ s/\.pdb$/.amber.pdb/;
     open (PDBOUT, ">$filename");
     my $string = <<END
-REMARK   4 COMPLIANT WITH AMBER FORMAT
+REMARK 888 COMPLIANT WITH AMBER FORMAT
 REMARK 888 WRITTEN BY PDB4AMBER.pl
 REMARK 888 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 END
     ;
-    print PDBOUT $string;
     print PDBOUT $header;
+    print PDBOUT $string;
     while (my $newline = shift @{$pdb_sorted}) {
         print PDBOUT $newline . "\n";
     }
