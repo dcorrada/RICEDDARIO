@@ -104,6 +104,28 @@ to launch the script the input files must be moved in two folders defining the
     
     -threads|t <int>        number of concurrent threads during MM-GBSA 
                             calculation step (default: $opts{'THREADS'})
+
+
+*** OUTPUT ***
+
+The script produces a csv file called <rankprod.csv> with a content like this:
+
+    PROBE;LOG(RP);Evalue
+    R0199;2.1150e-01;3.0000e-04
+    R0200;8.5183e-02;1.9720e-01
+    R0195;-1.5304e-01;1.5500e-02
+    R0117;-4.7448e-02;4.8240e-01
+    [...]
+
+The "PROBE" column indicate the probe names.
+
+The "LOG(RP)" column is the rank product score. For each probe, the more 
+positive score defines a more positive delta between values of QUERY dataset 
+versus REFERENCE dataset. Viceversa, the more negative score defines a more n
+egative delta between values of QUERY dataset versus REFERENCE dataset.
+
+The "Evalue" column indicates how much significant is the rank product score, 
+based on an amount of random permutations of input data (defined with option -p).
 ROGER
         ;
         print $spiega;
@@ -183,7 +205,7 @@ ENEDECOMP: {
     
     my $rawdata = { };
     
-    # leggo dalla lista dei dat files relativi alla decomposiozione energetica
+    # leggo dalla lista dei dat files relativi alla decomposizione energetica
     printf("\n%s parsing input data...", clock());
     opendir(DH, $workdir);
     my @dat_infiles = grep { /_DECOMP\.dat$/ } readdir(DH);
@@ -202,11 +224,9 @@ ENEDECOMP: {
                 next if ($newline =~ /(Total|Residue|------)/);
                 next unless $newline;
                 my ($resi, $value) = $newline =~ /^\w{3} +(\d+).+\| +(-{0,1}\d{1,}\.\d{3}) \+\/-  0.000$/;
-                if (abs($value) >= $opts{'DGTHRESHOLD'}) {
-                    $resi = sprintf("R%04d", $resi);
-                    $rawdata->{$dataset}->{$resi} = { } unless (exists $rawdata->{$dataset}->{$resi});
-                    $rawdata->{$dataset}->{$resi}->{$sample} = $value;
-                }
+                $resi = sprintf("R%04d", $resi);
+                $rawdata->{$dataset}->{$resi} = { } unless (exists $rawdata->{$dataset}->{$resi});
+                $rawdata->{$dataset}->{$resi}->{$sample} = $value;
             } else {
                 next; # skippo il file fino alla sezione che mi interessa
             }
@@ -215,41 +235,37 @@ ENEDECOMP: {
     }
     print "done\n";
     
-    printf("%s filtering shared probes...", clock());
-    # filtro i dati per la soglia definita con $opts{'RATIO'}
+    printf("%s filtering probes...", clock());
+    my %probes_selected;
     for my $dataset (keys %{$rawdata}) {
-        my $howmany = scalar grep { /$dataset/ } @dat_infiles;
-        $howmany *= $opts{'RATIO'};
+        my $ratio = scalar grep { /$dataset/ } @dat_infiles;
+        $ratio *= $opts{'RATIO'};
         for my $resi (keys %{$rawdata->{$dataset}}) {
-            delete $rawdata->{$dataset}->{$resi}
-                if (scalar keys %{$rawdata->{$dataset}->{$resi}} < $howmany);
+            my $howmany = 0E0;
+            for my $probe (keys %{$rawdata->{$dataset}->{$resi}}) {
+                my $value = $rawdata->{$dataset}->{$resi}->{$probe};
+                if (abs($value) >= $opts{'DGTHRESHOLD'}) {
+                    $howmany++;
+                }
+            }
+            $probes_selected{$resi} = $howmany
+                if ($howmany >= $ratio);
         }
-    }
-    
-    # filtro i dati condivisi tra i dataset
-    my @shared_probes;
-    for my $resi (sort keys %{$rawdata->{'REFERENCE'}}) {
-        push (@shared_probes, $resi)
-            if (exists $rawdata->{'QUERY'}->{$resi});
     }
     
     # scrivo i csv di input per il Rank Product
     for my $dataset ('REFERENCE', 'QUERY') {
         my $outfile = 'enedecomp_' . $dataset . '.csv';
         open $fh, '>', $outfile;
-        my $newline = 'POSE;' . join(';',@shared_probes);
+        my $newline = 'POSE;' . join(';', sort keys %probes_selected);
         print $fh "$newline\n";
         my @samples = grep { /$dataset/ } @dat_infiles;
         for my $sample (@samples) {
             my $null;
             ($null, $sample) = $sample =~ /^(REFERENCE|QUERY)\.(.+)_DECOMP\.dat$/;
             $newline = "$sample";
-            for my $probe (@shared_probes) {
-                if (exists $rawdata->{$dataset}->{$probe}->{$sample}) {
-                    $newline .= ';' . $rawdata->{$dataset}->{$probe}->{$sample};
-                } else {
-                    $newline .= ';NA';
-                }
+            for my $probe (sort keys %probes_selected) {
+                $newline .= ';' . $rawdata->{$dataset}->{$probe}->{$sample};
             }
             print $fh "$newline\n";
         }
@@ -266,8 +282,8 @@ RANKPROD: {
     # preparo l'hash di input
     my $intable = { };
     my %incsv = (
-        'REFERENCE'  => 'enedecomp_REFERENCE.csv',
-        'QUERY'      => 'enedecomp_QUERY.csv'
+        'datasetA.csv'  => 'enedecomp_QUERY.csv',
+        'datasetB.csv'  => 'enedecomp_REFERENCE.csv'
     );
     for my $dataset (keys %incsv) {
         $intable->{$dataset} = { };
@@ -283,30 +299,16 @@ RANKPROD: {
             my @values = split(';', $newline);
             foreach my $i (1..scalar(@values)-1) {
                 my $value = $values[$i];
-                $value = '0.000' if ($value =~ m/NA/);
                 push(@{$intable->{$dataset}->{$probe_names[$i]}}, $value);
             }
         }
         close $fh;
     }
     
-    # seleziono solo i probes comuni tra reference e query
-    my @A = keys %{$intable->{'REFERENCE'}};
-    my @B = keys %{$intable->{'QUERY'}};
-    my @shared;
-    for my $A_elem (0..(scalar @A)-1) {
-        for my $B_elem (0..(scalar @B)-1) {
-            if ($A[$A_elem] eq $B[$B_elem]) {
-                push(@shared, $A[$A_elem]);
-            }
-        }
-    }
-    
-    print "done\n";
-    
     # scrivo i file csv di input per lo script RankPride
+    my @shared = sort keys %{$intable->{'datasetA.csv'}};
     for my $dataset (keys %{$intable}) {
-        my $outfile = $workdir . "/$dataset.shared.csv";
+        my $outfile = "$workdir/$dataset";
         open($fh, '>' . $outfile);
         my $string = join(';', @shared) . "\n";
         print $fh $string;
@@ -322,12 +324,14 @@ RANKPROD: {
         close $fh;
     }
     
+    print "done\n";
+    
     # lancio RankPride
     $script = <<ROGER
 #!/bin/bash
 
 cd $workdir;
-$bins{'RankPride'} QUERY.shared.csv REFERENCE.shared.csv;
+$bins{'RankPride'} datasetA.csv datasetB.csv;
 mv rankprod.csv ..;
 mv enedecomp_REFERENCE.csv ..;
 mv enedecomp_QUERY.csv ..;
