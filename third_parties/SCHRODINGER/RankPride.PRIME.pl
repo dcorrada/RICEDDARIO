@@ -3,6 +3,8 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.02.b    - updated probe selection
+#
 # release 15.02.a    - initial release
 #
 # ##############################################################################
@@ -56,7 +58,7 @@ USAGE: {
     my $header = <<ROGER
 ********************************************************************************
 RankPride for PRIME
-release 15.02.a
+release 15.02.b
 
 Copyright (c) 2015, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -93,6 +95,28 @@ the "REFERENCE" and the "QUERY" complexes, respectively.
     
     -shell|s <float>    shell, in Angstrom, by which residues will be considered
                         for energy decomposition analysis (default: $opts{'SHELL'} A)
+
+
+*** OUTPUT ***
+
+The script produces a csv file called <rankprod.csv> with a content like this:
+
+    PROBE;LOG(RP);Evalue
+    R0199;2.1150e-01;3.0000e-04
+    R0200;8.5183e-02;1.9720e-01
+    R0195;-1.5304e-01;1.5500e-02
+    R0117;-4.7448e-02;4.8240e-01
+    [...]
+
+The "PROBE" column indicate the probe names.
+
+The "LOG(RP)" column is the rank product score. For each probe, the more 
+positive score defines a more positive delta between values of QUERY dataset 
+versus REFERENCE dataset. Viceversa, the more negative score defines a more n
+egative delta between values of QUERY dataset versus REFERENCE dataset.
+
+The "Evalue" column indicates how much significant is the rank product score, 
+based on an amount of random permutations of input data (defined with option -p).
 ROGER
         ;
         print $spiega;
@@ -217,8 +241,8 @@ RANKPROD: {
     # preparo l'hash di input
     my $intable = { };
     my %incsv = (
-        'REFERENCE'  => 'enedecomp_REFERENCE.csv',
-        'QUERY'      => 'enedecomp_QUERY.csv'
+        'datasetA.csv'  => 'enedecomp_QUERY.csv',
+        'datasetB.csv'  => 'enedecomp_REFERENCE.csv'
     );
     for my $dataset (keys %incsv) {
         $intable->{$dataset} = { };
@@ -234,32 +258,16 @@ RANKPROD: {
             my @values = split(';', $newline);
             foreach my $i (1..scalar(@values)-1) {
                 my $value = $values[$i];
-                $value = '0.000' if ($value =~ m/NA/);
                 push(@{$intable->{$dataset}->{$probe_names[$i]}}, $value);
             }
         }
         close CSV;
     }
     
-    # seleziono solo i probes comuni tra reference e query
-    my @A = keys %{$intable->{'REFERENCE'}};
-    my @B = keys %{$intable->{'QUERY'}};
-    my @shared;
-    for my $A_elem (0..(scalar @A)-1) {
-        for my $B_elem (0..(scalar @B)-1) {
-            if ($A[$A_elem] eq $B[$B_elem]) {
-                push(@shared, $A[$A_elem]);
-            }
-        }
-    }
-    printf("\n%s Probes summary\n", clock());
-    printf("    reference.: %d\n", scalar @A);
-    printf("    query.....: %d\n", scalar @B);
-    printf("    shared....: %d\n", scalar @shared);
-    
     # scrivo i file csv di input per lo script RankPride
+    my @shared = sort keys %{$intable->{'datasetA.csv'}};
     for my $dataset (keys %{$intable}) {
-        my $outfile = $tempus . "/$dataset.shared.csv";
+        my $outfile = "$tempus/$dataset";
         open(CSV, '>' . $outfile);
         my $string = join(';', @shared) . "\n";
         print CSV $string;
@@ -267,7 +275,9 @@ RANKPROD: {
         for my $replica (0..$replicas-1) {
             $string = '';
             for my $probe (@shared) {
-                $string .= $intable->{$dataset}->{$probe}->[$replica] . ';';
+                my $value = $intable->{$dataset}->{$probe}->[$replica];
+                $value = 'NA' unless ($value);
+                $string .= $value . ';';
             }
             $string =~ s/;$/\n/;
             print CSV $string;
@@ -282,8 +292,10 @@ RANKPROD: {
 #!/bin/bash
 
 cd $tempus;
-$bins{'RankPride'} QUERY.shared.csv REFERENCE.shared.csv;
+$bins{'RankPride'} datasetA.csv datasetB.csv;
 mv rankprod.csv ..;
+mv enedecomp_REFERENCE.csv ..;
+mv enedecomp_QUERY.csv ..;
 ROGER
     ;
     quelo($cmdline, 'RankPride');
