@@ -3,6 +3,9 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.02.a    - Contributes from all residues are listed, an "IN/OUT"
+#                      flag defines if a residue belongs or not to the shell
+#
 # release 15.01.a    - initial release
 #
 # ##############################################################################
@@ -66,7 +69,7 @@ USAGE: {
     my $header = <<ROGER
 ********************************************************************************
 enedecomp_parser.pl
-release 14.12.a
+release 15.02.a
 
 Copyright (c) 2014, Dario Corrada <dario.corrada\@gmail.com>
 
@@ -208,6 +211,9 @@ INFILE: { # leggo e parso il file di input
         }
     }
     close MAE;
+    
+    # elimino i file intermedi
+    qx/rm $basename.mae/ if ($format eq 'maegz');
 }
 
 DISTANCE: { # calcolo quanto ogni residuo è distante dal ligando
@@ -249,21 +255,22 @@ OUTFILE: { # scrivo il csv filtrato sulla shell
     printf("\n%s writing output file\n", clock());
     open(CSV, '>' . "$basename.csv");
     my @cols = ('dG(NS)','Hbond','Coulomb','Packing','vdW','Lipo','Solv_GB','Covalent','SelfCont');
-    my $header = sprintf("resi;resn;dist;%s\n", join(';',@cols));
+    my $header = sprintf("resi;resn;inout;dist;%s\n", join(';',@cols));
     print CSV $header;
     foreach my $key (sort keys %{$distances}) {
-        if ($distances->{$key} < $shell) {
-            my ($resnum) = $key =~ /^REC_0*(\d+)$/;
-            my $row = sprintf("%s;%s;%.3f", $resnum, $parsed_mae->{$key}->{'resn'}, $distances->{$key});
-            foreach my $col (@cols) {
-                my $value = $parsed_mae->{$key}->{$col};
-                $value = sprintf("%.3f", $value)
-                    if ($value =~ /^[e\d\-\.]+$/);
-                $row .= ";$value";
-            }
-            $row .= "\n";
-            print CSV $row;
+        my ($resnum) = $key =~ /^REC_0*(\d+)$/;
+        my $inout = 'OUT';
+        $inout = 'IN' if ($distances->{$key} < $shell);
+        my $row = sprintf("%s;%s;%s;%.3f", $resnum, $parsed_mae->{$key}->{'resn'}, $inout, $distances->{$key});
+        foreach my $col (@cols) {
+            my $value = $parsed_mae->{$key}->{$col};
+            $value = sprintf("%.3f", $value)
+                if ($value =~ /^[e\d\-\.]+$/);
+            $row .= ";$value";
         }
+        $row .= "\n";
+        print CSV $row;
+        
     }
     close CSV;
 }
