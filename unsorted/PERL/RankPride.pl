@@ -99,6 +99,27 @@ measurements (ie samples). Missing values must be filled with a 'NA' string.
     
     -threads|t <int>    Number of concurrent threads used for calculations 
                         (default: $THREADS)
+
+*** OUTPUT ***
+
+The script produces a csv file called <rankprod.csv> with a content like this:
+
+    PROBE;LOG(RP);Evalue
+    R0199;2.1150e-01;3.0000e-04
+    R0200;8.5183e-02;1.9720e-01
+    R0195;-1.5304e-01;1.5500e-02
+    R0117;-4.7448e-02;4.8240e-01
+    [...]
+
+The "PROBE" column indicate the probe names.
+
+The "LOG(RP)" column is the rank product score. For each probe, the more 
+positive score defines a more positive delta between values of datasetA 
+versus datasetB. Viceversa, the more negative score defines a more negative 
+delta between values of datasetA versus datasetB.
+
+The "Evalue" column indicates how much significant is the rank product score, 
+based on an amount of random permutations of input data (defined with option -p).
 ROGER
         ;
         print $spiega;
@@ -238,7 +259,11 @@ MAINSTREAM: {
     open(CSV, '>' . 'rankprod.csv');
     print CSV "PROBE;LOG(RP);Evalue\n";
     foreach my $probe (0..$tot_probes-1) {
-        my $string = sprintf("%s;%.04e;%.04e\n", $probe_names[$probe], $logRP[$probe], $evalues[$probe]);
+        my $logrp_format = sprintf("%.04e", $logRP[$probe]);
+        $logrp_format =~ s/e\+/e/ if ($logrp_format =~ /e\+/);
+        my $evalue_format = sprintf("%.04e", $evalues[$probe]);
+        $evalue_format =~ s/e\+/e/ if ($evalue_format =~ /e\+/);
+        my $string = sprintf("%s;%s;%s\n", $probe_names[$probe], $logrp_format, $evalue_format);
         print CSV $string;
     }
     close CSV;

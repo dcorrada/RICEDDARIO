@@ -3,6 +3,10 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.02.c    - backup of temporary files
+#                    - updated probe selection
+#                    - compliance with enedecomp_parser 15.02.a
+#
 # release 15.02.b    - updated probe selection
 #
 # release 15.02.a    - initial release
@@ -36,15 +40,17 @@ use Carp;
 our %opts = (
     'SHELL'     => 5.5,         # shell by which residues will be considered during enedecomp analysis
     'RATIO'     => 0.75,        # how many poses/residue retain (lower threshold)?
+    
+    'INTERMEDIATES'     => '',
 );
-our $riceddario = $ENV{RICEDDARIOHOME};
+our $pandora = $ENV{PANDORAHOME};
 our $workdir = getcwd();
 our $tempus = "$workdir/.RankPride.PRIME";
 our $infiles = { 'REFERENCE' => [ ], 'QUERY' => [ ] };
 our %bins = (
-    'quest'             => $riceddario . '/Qlite' . '/QUEST.client.pl',
-    'enedecomp_parser'  => $riceddario . '/third_parties/SCHRODINGER' . '/enedecomp_parser.pl',
-    'RankPride'         => $riceddario . '/unsorted/PERL' . '/RankPride.pl',
+    'quest'             => $pandora . '/QUEST/QUEST.client.pl', # gestore di code mio
+    'enedecomp_parser'  => $pandora . '/Maestro_Script/enedecomp_parser.pl',
+    'RankPride'         => $pandora . '/utilities_tools/RankPride.pl',
 );
 
 ## SBLOG ##
@@ -54,11 +60,11 @@ mkdir $tempus; # prima di tutto creo una tempdir
 USAGE: {
     use Getopt::Long;no warnings;
     my $help;
-    GetOptions('help|h' => \$help, 'shell|s=f' => \$opts{'SHELL'}, 'ratio|r=f' => \$opts{'RATIO'});
+    GetOptions('help|h' => \$help, 'shell|s=f' => \$opts{'SHELL'}, 'ratio|r=f' => \$opts{'RATIO'}, 'inter|i' => \$opts{'INTERMEDIATES'});
     my $header = <<ROGER
 ********************************************************************************
 RankPride for PRIME
-release 15.02.b
+release 15.02.c
 
 Copyright (c) 2015, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -90,6 +96,8 @@ the "REFERENCE" and the "QUERY" complexes, respectively.
 
 
 *** OPTIONS ***
+    -inter|i            keep intermediate files (compressed in a tarball)
+
     -ratio|r <float>    ratio of the minimal number of poses per residue to 
                         retain (default: $opts{'RATIO'})
     
@@ -156,9 +164,14 @@ READY2GO: {
 
 ENEDECOMP: {
     print "\n*** ENERGY DECOMPOSITION ***\n";
+    
+    my %probes;
+    my $csv_summary = { };
+    my %pose_list;
+    
     foreach my $dataset (keys $infiles) {
-        my $csv_summary = { };
         chdir $tempus;
+        $csv_summary->{$dataset} = { };
         printf("\n%s Processing %s data\n", clock(), $dataset);
         foreach my $maegz (@{$infiles->{$dataset}}) {
             my ($jobname) = $maegz =~ m/(.*)\.maegz$/;
@@ -168,7 +181,7 @@ ENEDECOMP: {
 cp $workdir/$dataset/$maegz $tempus;
 cd $tempus;
 $bins{'enedecomp_parser'} $maegz -shell $opts{'SHELL'};
-rm $jobname.mae*;
+rm $jobname.mae;
 ROGER
             ;
             quelo($cmdline, $jobname);
@@ -180,53 +193,65 @@ ROGER
         my @file_list = grep { /\.csv$/ } readdir(DIR);
         closedir DIR;
         
-        my @pose_list;
+        $pose_list{$dataset} = [ ];
         foreach my $infile (@file_list) {
             my ($pose) = $infile =~ /(.+)\.csv$/;
-            push(@pose_list, $pose);
+            push(@{$pose_list{$dataset}}, $pose);
             open(CSV, '<' . $infile);
             my $newline = <CSV>; # salto la prima riga d'intestazione
             while ($newline = <CSV>) {
                 chomp $newline;
                 my @values = split(';', $newline);
                 my $resi = sprintf("%04d", $values[0]);
-                $csv_summary->{$resi} = { }
-                    unless (exists $csv_summary->{$resi});
-                my $dg_tot = $values[3];
-                $csv_summary->{$resi}->{$pose} = $dg_tot;
+                $csv_summary->{$dataset}->{$resi} = { }
+                    unless (exists $csv_summary->{$dataset}->{$resi});
+                my $dg_tot = $values[4];
+                my $inout = $values[2];
+                $csv_summary->{$dataset}->{$resi}->{$pose} = [ $inout, $dg_tot ];
             }
             close CSV;
-            unlink $infile;
         }
         
-        # filtro solo i residui condivisi almeno dal $opts{'RATIO'} delle pose
+        # per ogni residuo conto per quante pose ricade entro la shell
+        # se il numero delle volte è maggiore di $opts{'RATIO'} lo annoto
         my $ref = scalar @{$infiles->{$dataset}};
-        printf("    Entries parsed.....: %d\n", scalar keys %{$csv_summary});
-        foreach my $res (keys %{$csv_summary}) {
-            my $tot = scalar keys %{$csv_summary->{$res}};
-            if ($tot <= ($ref * $opts{'RATIO'})) {
-                delete $csv_summary->{$res};
+        for my $res (keys %{$csv_summary->{$dataset}}) {
+            my $tot = 0;
+            for my $pose (keys %{$csv_summary->{$dataset}->{$res}}) {
+                my $isin = $csv_summary->{$dataset}->{$res}->{$pose}->[0];
+                $tot++ if ($isin eq 'IN');
+            }
+            if ($tot >= ($ref * $opts{'RATIO'})) {
+                    if (exists $probes{$res}) {
+                        $probes{$res} .= ' | ' . $dataset;
+                    } else {
+                        $probes{$res} = $dataset;
+                    }
             }
         }
-        printf("    Entries filtered...: %d\n", scalar keys %{$csv_summary});
+        
+        # sposto i tempfile prodotti da enedecomp_parser altrove
+        my $moving = <<ROGER
+cd $tempus;
+mkdir $dataset;
+mv *.maegz $tempus/$dataset;
+mv *.csv $tempus/$dataset;
+ROGER
+        ;
+        qx/$moving/;
+    }
     
-        # Scrivo il csv di riepilogo
-        chdir $workdir;
+    # Scrivo i file csv di riepilogo
+    chdir $workdir;
+    for my $dataset (keys %{$csv_summary}) {
         open(CSV, '>' . 'enedecomp_' . $dataset . '.csv');
-        my $header = 'POSE;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
+        my $header = 'POSE;res_' . join(';res_', sort keys %probes) . "\n";
         print CSV $header;
-        my %resi_values;
-        foreach my $pose (@pose_list) {
+        foreach my $pose (@{$pose_list{$dataset}}) {
             my $row = $pose;
-            foreach my $resi (sort keys %{$csv_summary}) {
-                $resi_values{$resi} = [ ] unless (exists $resi_values{$resi});
-                if (exists $csv_summary->{$resi}->{$pose}) {
-                    my $value = $csv_summary->{$resi}->{$pose};
-                    $row .= ';' . $value;
-                    push(@{$resi_values{$resi}}, $value);
-                } else {
-                    $row .= ';NA';
-                }
+            foreach my $resi (sort keys %probes) {
+                my $value = $csv_summary->{$dataset}->{$resi}->{$pose}->[1];
+                $row .= ';' . $value;
             }
             $row .= "\n";
             print CSV $row;
@@ -303,8 +328,26 @@ ROGER
     chdir $workdir;
 }
 
+CLEANSWEEP: {
+    if ($opts{'INTERMEDIATES'}) {
+        print "\n\n*** BACKUP ***\n";
+        
+        printf("\n%s compressing temp files...\n", clock());
+        my $script = <<ROGER
+cd $tempus;
+cd ..;
+mv $tempus TEMPUS;
+tar -c TEMPUS | gzip -c9 > TEMPUS.tar.gz;
+rm -r TEMPUS
+ROGER
+        ;
+        qx/$script/;
+    } else {
+        qx/rm -r $tempus/; # rimuovo la directory temporanea
+    }
+}
+
 FINE: {
-    qx/rm -r $tempus/; # rimuovo la directory temporanea
     print "\n\n*** EMIRP.edirPknaR ***\n";
     exit;
 }
