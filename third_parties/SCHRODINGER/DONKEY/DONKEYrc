@@ -1,0 +1,121 @@
+# ###################### DONKEY's protocol file ################################
+# 
+# Lines starting with a '#' char are comments, so they are not parsed by the
+# script.
+#
+# Lines starting with a '&' char define the boundaries of a scpeific section,
+# each section is terminated by a '&end' expression.
+# 
+# [reserved]: some expression of Schrodinger scripting language are internally
+# parsed by DONKEY, therefore are ignored if are present herein.
+# 
+# ##############################################################################
+
+# option passed to Protein Structure Alignment (SKA), for fitting the model
+# structures to the reference complex.
+# (see also the help of <$SCHRODINGER/utilities/align_binding_sites>)
+&fit
+# binding site cutoff distance from the ligand in Angstrom
+-cutoff 7.0
+-color
+-NOJOBID        [reserved]
+-jobname SKA    [reserved]
+&end
+
+
+# template for '.in' file, minimization tasks
+&mini
+INPUT_STRUCTURE_FILE infile.mae         [reserved]
+OUTPUT_STRUCTURE_FILE outfile.maegz     [reserved]
+JOB_TYPE MINIMIZATION                   [reserved]
+USE_SUBSTRUCTURE_FILE True              [reserved]
+FORCE_FIELD OPLS_2005
+SOLVENT Water
+MINI_METHOD TNCG
+MAXIMUM_ITERATION 1500
+CONVERGE_ON Gradient
+&end
+
+
+# template for '.sbc' file, specify substructure expressions for applying constraints
+&sbc
+# use only the following expression to perform a fully unconstrained minimization
+# ASL1       0 ( all )
+ ASL1       0 ( ( fillres within 5 ( mol.entry 2 ) ) AND NOT ( backbone ) )
+ ASL2 200.000 ( ( fillres within 5 ( mol.entry 2 ) ) AND ( backbone ) )
+ ASL2 500.000 ( ( fillres within 7 ( mol.entry 2 ) ) AND NOT ( fillres within 5 ( mol.entry 2 ) ) )
+ ASL2  -1.000 ( ( mol.entry 1 ) AND NOT ( fillres within 7 ( mol.entry 2 ) ) )
+&end
+
+
+# template for '.grid' file, define the size of the docking grid
+&grid
+INNERBOX 10, 10, 10
+ACTXRANGE 22.0
+ACTYRANGE 22.0
+ACTZRANGE 22.0
+GRID_CENTER 3.0, -4.0, 1.1    [reserved]
+OUTERBOX 22.0, 22.0, 22.0
+GRIDFILE grid.zip             [reserved]
+RECEP_FILE receptor.maegz     [reserved]
+&end
+
+
+# template for '.in' file, docking tasks
+&glide
+POSES_PER_LIG 1
+POSTDOCK NO
+WRITE_RES_INTERACTION YES
+WRITE_XP_DESC YES
+MAXREF 800
+RINGCONFCUT 2.500000
+PRECISION XP
+GRIDFILE grid.zip       [reserved]
+LIGANDFILE ligs.maegz   [reserved]
+&end
+
+
+# template for '.com' file, advanced minimization tasks
+# this format allows to enforce planarity of aromatic rings, recommended for
+# complexes where ligands show extended coniugated aromatic systems
+&post
+infile.mae      [reserved]
+outfile.maegz   [reserved]
+ DEBG       0      0      0      0     0.0000     0.0000     0.0000     0.0000
+ SOLV       3      1      0      0     0.0000     0.0000     0.0000     0.0000
+ BDCO       0      0      0      0     0.0000 99999.0000     0.0000     0.0000
+ FFLD      14      1      0      0     1.0000     0.0000     1.0000     0.0000
+ BGIN       0      0      0      0     0.0000     0.0000     0.0000     0.0000
+ SUBS       0      0      0      0     0.0000     0.0000     0.0000     0.0000
+ READ       0      0      0      0     0.0000     0.0000     0.0000     0.0000
+ CONV       2      0      0      0     0.0500     0.0000     0.0000     0.0000
+ MINI       9      0   1500      0     0.0000     0.0010     0.0000     0.0000
+ END        0      0      0      0     0.0000     0.0000     0.0000     0.0000
+&end
+
+
+# template for '.inp' file, MM-GBSA tasks
+&prime
+STRUCT_FILE  complex_pv.maegz   [reserved]
+# flag for in place MM-GBSA calculation
+# FROZEN
+JOB_TYPE     REAL_MIN
+OUT_TYPE     COMPLEX
+RFLEXDIST    7
+RFLEXGROUP   side
+RCONS        ((fillres within 7 (atom.i_psp_Prime_MMGBSA_Ligand 1)) AND NOT (fillres within 5 (atom.i_psp_Prime_MMGBSA_Ligand 1)))
+STR_CONS     120
+PRIME_OPT    MINIM_NITER         = 50
+PRIME_OPT    MINIM_NSTEP         = 200
+PRIME_OPT    MINIM_RMSG          = 0.01
+PRIME_OPT    MINIM_METHOD        = tn
+PRIME_OPT    PLANARITY_RESTRAINT = 10
+&end
+
+# options for the energy decomposition step
+&deco
+# maximum distance from the ligand (e.g.: the more external constraint shell of minimization)
+shell 7.01
+# in how many poses (%) the residues (falling into the "shell" distance) should be present?
+ratio 0.75
+&end
