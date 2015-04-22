@@ -9,7 +9,7 @@ use Net::SMTP;
 # definisco l'host SMTP
 my $smtp = Net::SMTP->new('mail.mi.cnr.it');
 
-# $smtp->auth('dcorrada-itb', 'yjr9171');
+# $smtp->auth('user', 'pwd');
 
 $smtp->mail('dario.corrada@itb.cnr.it');
 $smtp->to('dario.corrada@gmail.com');
