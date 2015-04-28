@@ -1,6 +1,14 @@
 #!/usr/bin/perl
 # -d
 
+# ########################### RELEASE NOTES ####################################
+#
+# release 15.4.a        - BUGFIX, output PDB formatting
+#
+# release 14.5.a        - initial release
+#
+# ##############################################################################
+
 use strict;
 use warnings;
 use Carp;
@@ -27,7 +35,7 @@ INIT: {
     my $splash = <<END
 ********************************************************************************
 PDB4AMBER
-release 14.5.a
+release 15.4.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -241,8 +249,8 @@ CORE: {
         unless ($newer_chain eq $current_chain) {
             
             # inserisco un TER
-            my $TER = sprintf("TER   % 5d     % 4s %s% 4d%s", 
-                $inc_atom, $prev_resn, $inc_chain, $inc_resi-1, $prev_ins);
+            my $TER = sprintf('TER   %*d     %*s %s%*d%s',
+                5, $inc_atom, 4, $prev_resn, $inc_chain, 4, $inc_resi-1, $prev_ins);
             
             $inc_atom++;
             $inc_chain = shift @letters;
@@ -250,8 +258,8 @@ CORE: {
             push(@{$pdb_sorted}, $TER);
         }
         
-        $deepcopy[1] = sprintf("% 5d",$inc_atom); # right justified format
-        $deepcopy[8] = sprintf("% 4d",$inc_resi); # right justified format
+        $deepcopy[1] = sprintf('%*d', 5, $inc_atom); # right justified format
+        $deepcopy[8] = sprintf('%*d', 4, $inc_resi); # right justified format
         $deepcopy[7] = sprintf("%s",$inc_chain);
         
         push(@{$pdb_sorted}, join('', @deepcopy));
@@ -259,8 +267,8 @@ CORE: {
         
         $inc_atom++; # aggiorno l'atom number
     }
-    my $TER = sprintf("TER   % 5d     % 4s %s% 4d%s", 
-                $inc_atom, $prev_resn, $inc_chain, $inc_resi, $prev_ins);
+    my $TER = sprintf('TER   %*d     %*s %s%*d%s',
+                5, $inc_atom, 4, $prev_resn, $inc_chain, 4, $inc_resi, $prev_ins);
     push(@{$pdb_sorted}, $TER);
     
     # scrivo il file pdb processato
@@ -270,10 +278,9 @@ CORE: {
     my $string = <<END
 REMARK 888 COMPLIANT WITH AMBER FORMAT
 REMARK 888 WRITTEN BY PDB4AMBER.pl
-REMARK 888 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 END
     ;
-    print PDBOUT $header;
+#     print PDBOUT $header;
     print PDBOUT $string;
     while (my $newline = shift @{$pdb_sorted}) {
         print PDBOUT $newline . "\n";
