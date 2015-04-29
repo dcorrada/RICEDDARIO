@@ -198,7 +198,7 @@ CORE: {
     # rinumero gli atomi
     my $i = 1;
     foreach my $newline (@{$pdb_noH}) {
-        $newline->[1] = sprintf("% 5d",$i); # riempio a sinistra con degli spazi
+        $newline->[1] = sprintf('%*d', 5, $i); # riempio a sinistra con degli spazi
         $i++;
     }
     

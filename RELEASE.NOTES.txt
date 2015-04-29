@@ -10,6 +10,7 @@ REMEMBER to read...
 *** release XX.YY ***
 - DONKEY: new release (15.04.a)
 - miniAMBER: new release (15.02.a)
+- GROMACS2AMBER: minor bugfix
 - PDB4AMBER: minor bugfix (15.04.a)
 - MM-GBSA_PPI: initial release (15.02.a)
 - RankPride.AMBER.PPI: initial release (15.02.a)
