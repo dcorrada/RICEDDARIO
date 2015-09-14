@@ -8,8 +8,10 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+
+*** release 15.09 ***
 - DONKEY: new release (15.04.a)
-- miniAMBER: new release (15.02.a)
+- miniAMBER: new release (15.07.a)
 - GROMACS2AMBER: minor bugfix
 - PDB4AMBER: minor bugfix (15.04.a)
 - MM-GBSA_PPI: initial release (15.02.a)
