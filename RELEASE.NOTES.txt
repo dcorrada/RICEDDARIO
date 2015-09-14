@@ -1,14 +1,6 @@
 This is a summary of the major changes made to the package, see also the related 
 release note of the individual scripts for further details.
 
-REMEMBER to read...
-
-<https://github.com/dcorrada/RICEDDARIO/wiki/CONTRIBUTORS#1-1-editing-change-logs>
-
-...before merging to 'master' branch
-
-*** release XX.YY ***
-
 *** release 15.09 ***
 - DONKEY: new release (15.04.a)
 - miniAMBER: new release (15.07.a)

@@ -1,4 +1,4 @@
-lun  2 feb 2015, 09.05.54, CET
+lun 14 set 2015, 17.21.31, CEST
 ./
 ├── CONTRIBUTORS.txt
 ├── date.txt
@@ -194,8 +194,10 @@ lun  2 feb 2015, 09.05.54, CET
 │   │   ├── miniAMBER.pl*
 │   │   ├── minimization.in*
 │   │   ├── MM-GBSA.in
+│   │   ├── MM-GBSA_PPI.pl*
 │   │   ├── PDB4AMBER.pl*
-│   │   └── production.in
+│   │   ├── production.in
+│   │   └── RankPride.AMBER.PPI.pl*
 │   ├── BLOCKS/
 │   │   ├── BLOCKS.i686*
 │   │   ├── BLOCKS.x86_64*
@@ -277,9 +279,23 @@ lun  2 feb 2015, 09.05.54, CET
 │   │   └── HYDROPHOBIC_PATCHES.py*
 │   ├── SCHRODINGER/
 │   │   ├── Compute_centroid.py*
-│   │   ├── DONKEY.pl*
+│   │   ├── delete_properties.py
+│   │   ├── DONKEY/
+│   │   │   ├── DONKEY.pl*
+│   │   │   ├── DONKEYrc
+│   │   │   ├── input_files/
+│   │   │   │   ├── 3F1O.pdb
+│   │   │   │   ├── 3H7W.pdb
+│   │   │   │   ├── 3H82.pdb
+│   │   │   │   ├── 4GHI.pdb
+│   │   │   │   ├── 4GS9.pdb
+│   │   │   │   ├── LIGANDS.maegz
+│   │   │   │   └── REFERENCE_COMPLEX.mae
+│   │   │   └── README.txt
 │   │   ├── enedecomp_parser.pl*
-│   │   ├── pv_convert.py*
+│   │   ├── mae_property_cleaner.pl*
+│   │   ├── pv_convert_3.0.py*
+│   │   ├── pv_convert_3.1.py
 │   │   ├── RankPride.PRIME.pl*
 │   │   └── split_complexes.py*
 │   └── VMD/
@@ -351,4 +367,4 @@ lun  2 feb 2015, 09.05.54, CET
     ├── sh_scheduler.pl*
     └── WORKFLOW.MAP.mm
 
-57 directories, 293 files
+59 directories, 307 files
