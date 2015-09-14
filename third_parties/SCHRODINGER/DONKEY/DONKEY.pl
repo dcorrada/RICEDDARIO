@@ -3,6 +3,13 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.04.a    - the docking protocol details are parsed from a 
+#                      configuration file (see DONKEYrc file)
+#                    - accurate fit of the models to the reference complex
+#                    - jobs are submitted as 'slow' (see QUEST '-q' option)
+#                    - option '-t' for defining the number of threads used for 
+#                      each job (see QUEST '-n' option)
+# 
 # release 15.01.a    - modified summary csv and boxplots on STEP7
 #                    - added timelog
 #
@@ -40,52 +47,62 @@ use Cwd;
 use Carp;
 use File::Copy;
 use Statistics::Descriptive;
-
-## FLAGS ##
-
-our $PLANARIZE = 0; # force aromatic rings to be planar, during post-docking minimization step (option avalaible only for ff OPLS_200X)
-our $PRIME_FREEZER = 0; # if enabled, force prime_mmgbsa to calculte energy without structure optimization
-our $JUMP = 'STEP1'; # force to (re)start the protocol from a specific step
-our $SHELL = 5.0; # shell by which residues will be considered during enedecomp analysis
-
-## SGALF ##
+use Switch;
 
 ## GLOBS ##
 
-our $license = $ENV{LM_LICENSE_FILE}; # Schrodinger license
+our $license = $ENV{LM_LICENSE_FILE}; # licenza di Schrodinger
 
-# paths
+# percorsi
 our $schrodinger = $ENV{SCHRODINGER};
 our $riceddario = $ENV{RICEDDARIOHOME};
 our $homedir = getcwd();
 our $sourcedir;
 our $destdir;
 
+# variabili modificabili tramite le opzioni
+our $JUMP       = 'STEP1';
+our $THREADSN   = 1;
+our $DONKEYRC   = $ENV{HOME} . '/.DONKEYrc';
+
 # i vari programmi che verranno usati
 my $wheRe = qx/which R/; chomp $wheRe;
 our %bins = (
     'glide'             => $schrodinger . '/glide',
     'macromodel'        => $schrodinger . '/macromodel',
-    'prepwizard'        => $schrodinger . '/utilities/prepwizard',
+    'maesubset'         => $schrodinger . '/utilities/maesubset',
+    'prepwizard'        => $schrodinger . '/utilities' . '/prepwizard',
     'prime_mmgbsa'      => $schrodinger . '/prime_mmgbsa',
+    'ska'               => $schrodinger . '/utilities' . '/align_binding_sites',
     'run'               => $schrodinger . '/run',
-    'structcat'         => $schrodinger . '/utilities/structcat',
-    'structconvert'     => $schrodinger . '/utilities/structconvert',
+    'structcat'         => $schrodinger . '/utilities' . '/structcat',
+    'structconvert'     => $schrodinger . '/utilities' . '/structconvert',
     'compute_centroid'  => $riceddario . '/third_parties/SCHRODINGER' . '/Compute_centroid.py',
-    'pv_convert'        => $riceddario . '/third_parties/SCHRODINGER' .  '/pv_convert.py',
-    'quest'             => $riceddario . '/Qlite' . '/QUEST.client.pl',
-    'split_complexes'   => $riceddario . '/third_parties/SCHRODINGER' . '/split_complexes.py',
     'enedecomp_parser'  => $riceddario . '/third_parties/SCHRODINGER' . '/enedecomp_parser.pl',
+    'mae_cleaner'       => $riceddario . '/third_parties/SCHRODINGER' . '/mae_property_cleaner.pl',
+    'pv_convert'        => $riceddario . '/third_parties/SCHRODINGER' .  '/pv_convert_3.1.py',
+    'split_complexes'   => $riceddario . '/third_parties/SCHRODINGER' . '/split_complexes.py',
+    'quest'             => $riceddario . '/Qlite' . '/QUEST.client.pl',
     'R'                 => $wheRe
 );
 
-our $gridsize;
-our $ligands;
-our $substructure;
-our $refstruct;
-our %iofiles;
-our $cmdline; 
-our %joblist;
+# contenuto del file DONKErc di configurazione del protocollo
+our $rc_contents = {
+    'deco'      => { }, # opzioni per lo STEP7
+    'glide'     => '',  # templato per il job di docking
+    'grid'      => '',  # templato per l'allestimento della griglia di docking
+    'mini'      => '',  # templato per l'allestimento della minimizzazione
+    'post'      => '',  # templato per l'allestimento della minimizzazione post-docking
+    'prime'     => '',  # templato per l'allestimento del calcolo MM-GBSA
+    'sbc'       => '',  # templato di substructure per la definizione delle shell
+    'fit'       => [ ], # opzioni per SKA, il tool per l'allineamento strutturale dei modelli
+};
+
+our $ligands;           # la lista dei ligandi da dockare
+our $refstruct;         # complesso di riferimento per costruire la griglia
+our %iofiles;           # lista degli input files, cambia ad ogni STEP
+our $cmdline;           # stringa per lanciare comandi da shell
+our %joblist;           # lista dei job attivi
 
 ## SBLOG ##
 
@@ -93,11 +110,11 @@ USAGE: {
     use Getopt::Long;no warnings;
     my $help;
     my $workflow;
-    GetOptions('planarize|p' => \$PLANARIZE, 'freeze|f' => \$PRIME_FREEZER, 'help|h' => \$help, 'jump|j=s' => \$JUMP, 'shell|s=f' => \$SHELL);
+    GetOptions('help|h' => \$help, 'jump|j=s' => \$JUMP, 'script|s=s' => \$DONKEYRC, 'threads|t=i' => \$THREADSN);
     my $header = <<ROGER
 ********************************************************************************
 DONKEY - DON't use KnimE Yet
-release 15.01.a
+release 15.04.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -121,22 +138,15 @@ version use OPLS_2005 as forcefield to perform the minimization steps.
     \$ DONKEY.pl
     
     # custom mode
-    \$ DONKEY.pl -f
     \$ DONKEY.pl -j STEP4
     
 *** OPTIONS ***
     
-    -freeze|f           do not perform mimimization during the rescoring step
-                        (ie minimization with prime_mmgbsa)
-    
     -jump|j <STEPX>     start workflow from a specific step
     
-    -planarize|p        enforce planarity of aromatic rings during post-docking 
-                        minimization step, recommended if you have ligands with 
-                        extended coniugated aromatic systems
+    -script|s <file>    docking protocol file
     
-    -shell|s <float>    shell, in Angstrom, by which residues will be considered
-                        for energy decomposition analysis (default: 5.0 A)
+    -threads|t <int>    number of threads required for each jobrun 
     
 *** INPUT FILES ***
     
@@ -153,11 +163,6 @@ version use OPLS_2005 as forcefield to perform the minimization steps.
      model_A.pdb             the structure files (only protein) of the different 
      model_B.pdb             models on which ligands will be docked
      [...]
-     
-     shells.sbc              the substructure file where are defined the 
-                             constraint shell for the minimization steps
-     
-     gridsize.grid           template file containing the sizes of the grid box
     ----------------------------------------------------------------------------
 ROGER
         ;
@@ -184,6 +189,102 @@ READY2GO: {
     if ($status =~ /E\- Cannot open socket/) {
         croak "\nE- QUEST server seems to be down\n\t";
     }
+    
+}
+
+PARSERC: { # configurazione del protocollo
+    
+    unless (-e $DONKEYRC) {
+        printf("\n%s W- No DONKErc file found, using default settings\n", clock());
+        $DONKEYRC = $ENV{HOME} . '/.DONKEYrc';
+        my $template = $riceddario . '/third_parties/SCHRODINGER/DONKEY' . '/DONKEYrc';
+        copy($template, $DONKEYRC);
+    }
+    
+    printf("\n%s using <%s>\n", clock(), $DONKEYRC);
+    
+    # parso il file di configurazione
+    open(RC, '<' . $DONKEYRC);
+    my $section = 'null';
+    while (my $newline = <RC>) {
+        chomp $newline;
+        next if ($newline =~ m/^#/); # salto le righe di commento
+        
+        # verifico se inizia una nuova sezione
+        if ($newline =~ m/^&end/) {
+            $section = 'null';
+        } elsif ($newline =~ m/^&/) {
+            ($section) = $newline =~ m/^&(.+)/;
+            next;
+        }
+        
+        # gestisco i contenuti delle sezioni
+        switch ($section) {
+            case 'deco' {
+                my ($key,$value) = $newline =~ /(\w+) +([\w\.-]+)/;
+                $rc_contents->{'deco'}->{$key} = $value;
+            }
+            
+            case 'glide' {
+                if ($newline =~ /(GRIDFILE|LIGANDFILE)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    $rc_contents->{'glide'} .= $newline . "\n";
+                }
+            }
+            
+            case 'grid' {
+                if ($newline =~ /(GRID_CENTER|GRIDFILE|RECEP_FILE)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    $rc_contents->{'grid'} .= $newline . "\n";
+                }
+            }
+            
+            case 'fit' {
+                if ($newline =~ /(-NOJOBID|-j)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    push(@{$rc_contents->{'fit'}}, $newline);
+                }
+            }
+            
+            case 'mini' {
+                if ($newline =~ /(INPUT_STRUCTURE_FILE|OUTPUT_STRUCTURE_FILE|JOB_TYPE|USE_SUBSTRUCTURE_FILE)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    $rc_contents->{'mini'} .= $newline . "\n";
+                }
+            }
+            
+            case 'post' {
+                if ($newline =~ /(mae|maegz)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    $rc_contents->{'post'} .= $newline . "\n";
+                }
+            }
+            
+            case 'prime' {
+                if ($newline =~ /(STRUCT_FILE)/) {
+                    next; # espressioni "riservate" da bypassare
+                } else {
+                    $rc_contents->{'prime'} .= $newline . "\n";
+                }
+            }
+            
+            case 'sbc' {
+                $rc_contents->{'sbc'} .= $newline . "\n";
+            }
+            
+            else {
+                next;
+            }
+        }
+        
+    }
+    close RC;
+    
 }
 
 my $warn = <<ROGER
@@ -199,43 +300,6 @@ print $warn;
 goto $JUMP;
 
 STEP1: {
-    print "\n*** STEP 0: checking input files ***\n";
-    
-    $sourcedir = getcwd();
-    opendir(DIR, $sourcedir);
-    my @file_list = grep { /\.\w{3,5}$/ } readdir(DIR);
-    closedir DIR;
-    
-    my $mods = ' ';
-    for my $infile (@file_list) {
-        if ($infile =~ /\.mae$/) {
-            $refstruct = $infile;
-        } elsif ($infile =~ /\.maegz$/) {
-            $ligands = $infile;
-        } elsif ($infile =~ /\.pdb$/) {
-            my ($basename) = $infile =~ /(.+)\.pdb/;
-            $iofiles{$basename} = $infile;
-            $mods .= "$infile\n                         ";
-        } elsif ($infile =~ /\.sbc$/) {
-            $substructure = $infile;
-        } elsif ($infile =~ /\.grid$/) {
-            $gridsize = $infile;
-        } else {
-            next;
-        }
-    }
-    printf("\n%s SUMMARY CHECK\n", clock());
-    printf("\n    FLAG freeze........: %d\n\n    FLAG planarize.....: %d\n\n    FLAG shell.........: %f\n", $PRIME_FREEZER, $PLANARIZE, $SHELL);
-    printf("\n    ligands library....: %s\n\n    reference complex..: %s\n\n    input models.......:%s\n    substructure.......: %s\n\n    grid sizes.........: %s", $ligands, $refstruct, $mods, $substructure, $gridsize);
-    print "\n\nInput files are alright? [Y/n] ";
-    my $ans = <STDIN>;
-    chomp $ans;
-    $ans = 'y' unless ($ans);
-    unless ($ans =~ /[Yy]/) {
-        print "\naborting";
-        goto FINE;
-    }
-
     print "\n\n*** STEP 1: preparing models ***\n";
     
     $sourcedir = $homedir;
@@ -243,115 +307,116 @@ STEP1: {
     mkdir $destdir;
     chdir $destdir;
     
-    # copio i file di input
-    copy("$sourcedir/$refstruct", $destdir);
-    
-    printf("\n%s parsing pdb files...", clock());
-    foreach my $basename (keys %iofiles) {
-        my $filename = $iofiles{$basename};
-        open(INFILE, '<' . "$sourcedir/$iofiles{$basename}");
-        my @infilecontent = <INFILE>;
-        close INFILE;
-        my $outfilecontent = [ ];
-        foreach my $newline (@infilecontent) {
-            chomp $newline;
-            next unless ($newline =~ /^ATOM/);
-            my @splitted = unpack('Z6Z5Z1Z4Z1Z3Z1Z1Z4Z1Z3Z8Z8Z8Z6Z6Z4Z2Z2', $newline);
-            # le righe "ATOM" sono strutturate così:
-            #   [1]     Atom serial number
-            #   [3]     Atom name
-            #   [4]     Alternate location indicator
-            #   [5]     Residue name
-            #   [7]     Chain identifier
-            #   [8]     Residue sequence number
-            #   [9]     Code for insertion of residues
-            #   [11-13] XYZ coordinates
-            #   [14]    Occupancy volume
-            #   [15]    T-factor
-            push(@{$outfilecontent}, [ @splitted ]);
+    # cerco i file di input
+    opendir(DIR, $sourcedir);
+    my @file_list = grep { /\.\w{3,5}$/ } readdir(DIR);
+    closedir DIR;
+    for my $infile (@file_list) {
+        if ($infile =~ /\.mae$/) { # complesso di riferimento per costruire la griglia
+            $refstruct = $infile;
+        } elsif ($infile =~ /\.maegz$/) { # lista dei ligandi
+            $ligands = $infile;
+        } elsif ($infile =~ /\.pdb$/) { # lista dei recettori
+            my ($basename) = $infile =~ /(.+)\.pdb/;
+            $iofiles{$basename} = $infile;
+        } else {
+            next;
         }
-        
-        open(OUTFILE, '>' . $iofiles{$basename});
-        my ($inc_atom, $inc_resi) = (1, 1);
-        my $current_res = $outfilecontent->[0][8];
-        foreach my $newline (@{$outfilecontent}) {
-            my $newer_res = $newline->[8];
-            unless ($newer_res eq $current_res) {
-                $inc_resi++;
-                $current_res = $newer_res;
-            }
-            
-            $newline->[1] = sprintf("% 5d",$inc_atom); # right justified format
-            $newline->[8] = sprintf("% 4d",$inc_resi); # right justified format
-            $newline->[7] = ' ';
-            
-            my $string = join('', @{$newline}) . "\n";
-            print OUTFILE $string;
-            
-            $inc_atom++; # aggiorno l'atom number
-        }
-        print OUTFILE "END\n";
-        close OUTFILE;
     }
-    print "done\n";
     
-    # lancio il preparation wizard per ogni modello
-    printf("\n%s preparing models with PrepWizard\n", clock());
+    # lancio il PrepWizard, assegno ex-novo gli idrogeni (-rehtreat), senza fare minimizzazioni preliminari (-noimpref)
+    printf("\n%s adding/replacing hydrogens\n", clock());
     foreach my $basename (keys %iofiles) {
-        # con il PrepWizard faccio:
-        # -> allinemanto strutturale di ogni modello al complesso di riferimento (-reference_st_file)
-        # -> evito di fare minimizzazioni preliminari (-noimpref)
-        # -> assegno ex-novo gli idrogeni (-rehtreat)
         $cmdline = <<ROGER
 #!/bin/bash
 export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'prepwizard'} -reference_st_file $refstruct -noimpref -rehtreat $iofiles{$basename} prep-$basename.mae -NOJOBID > prep-$basename.log
+$bins{'prepwizard'} -noimpref -rehtreat $sourcedir/$iofiles{$basename} prep-$basename.mae -NOJOBID > prep-$basename.log
 ROGER
         ;
         quelo($cmdline, $basename);
     }
     
     job_monitor($destdir);
-
-    # estraggo il ligando dalla struttura di riferimento e rinomino il file
-    $cmdline = "$bins{'run'} $bins{'pv_convert'} -l $refstruct";
-    qx/$cmdline/;
-    my $ligandfile = $refstruct;
-    $ligandfile =~ s/\.mae$/_1_lig.mae/;
-    rename($ligandfile, 'REFLIG.mae');
-    $ligandfile = 'REFLIG.mae';
     
-    printf("\n%s complexing models\n", clock());
-    # aggiungo il ligando ad ogni modello preparato e creo il pose viewer
-    foreach my $basename (keys %iofiles) {
-        print "    $basename...";
-        $cmdline = "$bins{'structcat'} -imae prep-$basename.mae -imae $ligandfile -omae prep-LIG-$basename.mae";
+    # allineo i modelli ad un subset di residui del complesso di riferimento (a
+    # meno che non sia esplicitamente specificato nel file di configurazione il
+    # fitting verrà effettuato sui residui che definiscono la cavità di binding)
+    printf("\n%s fitting models to the reference complex\n", clock());
+    my $prepared_maes = "../$refstruct";
+    foreach my $basename (sort keys %iofiles) {
+        $prepared_maes .= " prep-$basename.mae";
+    }
+    my $opts = join(' ', @{$rc_contents->{'fit'}});
+    $cmdline = "$bins{'ska'} $opts -jobname SKA $prepared_maes -NOJOBID > SKA.log";
+    qx/$cmdline/;
+    
+    # splitto i modelli fittati in singoli file mae
+    my $skanum = 2;
+    foreach my $basename (sort keys %iofiles) {
+        my $skaname= "ska-$basename.mae";
+        $cmdline = "$bins{'maesubset'} -n $skanum SKA-align-final.maegz > $skaname";
         qx/$cmdline/;
-        $cmdline = "$bins{'run'} $bins{'pv_convert'} -m prep-LIG-$basename.mae";
-        qx/$cmdline/;
-        if (-e "prep-LIG-$basename\_complex.mae") {
-            rename ("prep-LIG-$basename\_complex.mae", "prep-LIG-$basename\-complex.mae");
-            print "done\n";
-        } else {
-            croak "\nE- molecule <prep-$basename.mae> NOT complexed\n\t";
-        }
+        $skanum++;
     }
     
-    printf("\n%s compressing intermediate files\n", clock());
-    my $tozip = "$refstruct $ligandfile ";
+    # estraggo il ligando dalla struttura di riferimento
+    $cmdline = <<ROGER
+$bins{'run'} $bins{'pv_convert'} -l $sourcedir/$refstruct;
+mv $sourcedir/*_lig.mae $destdir/toclean.mae;
+$bins{'mae_cleaner'} toclean.mae;
+rm toclean.mae;
+mv toclean-cleaned.mae REFLIG.mae;
+ROGER
+    ;
+    qx/$cmdline/;
+    
+    # aggiungo il ligando ad ogni modello preparato e creo il pose viewer
+    printf("\n%s complexing models\n", clock());
     foreach my $basename (keys %iofiles) {
-        $tozip .= " $basename.pdb";
+        print "    $basename...\n";
+        $cmdline = <<ROGER
+$bins{'structcat'} -imae ska-$basename.mae -imae REFLIG.mae -omae cat-$basename.mae;
+$bins{'run'} $bins{'pv_convert'} -m cat-$basename.mae;
+mv cat-$basename\_complex.mae $basename\-complex.mae;
+ROGER
+        ;
+        qx/$cmdline/;
+    }
+    
+    
+    printf("\n%s compressing intermediate files\n", clock());
+    
+    # ligando dal complesso di riferimento
+    my $tozip = "REFLIG.mae"; 
+    
+    # intermedi del fitting dei modelli sul complesso di riferimento
+    $tozip .= " SKA-align-final.maegz";
+    $tozip .= " SKA-align-initial.mae";
+    $tozip .= " SKA.csv";
+    $tozip .= " SKA.log";
+    $tozip .= " SKA-matrix.csv";
+    $tozip .= " SKA-merged-input.maegz";
+    
+    foreach my $basename (keys %iofiles) {
+        # ri-assegnazione degli atomi di idrogeno
         $tozip .= " $basename-protassign.log";
         $tozip .= " $basename-protassign.mae";
         $tozip .= " $basename-protassign-out.mae";
+        
+        # output dal PreparationWizard
         $tozip .= " prep-$basename.mae";
         $tozip .= " prep-$basename.log";
-        $tozip .= " prep-LIG-$basename.mae";
-#         $tozip .= " prep-LIG-$basename.log";
+        
+        # modelli fittati
+        $tozip .= " ska-$basename.mae";
+        
+        # modelli complessati con il ligando di riferimento (con entry separate)
+        $tozip .= " cat-$basename.mae";
     }
+    
     $cmdline = <<ROGER
 cd $destdir;
 tar -c $tozip | gzip -c9 > intermediate.tar.gz;
@@ -369,56 +434,41 @@ STEP2: {
     mkdir $destdir;
     chdir $destdir;
     
-    # aggiorno la lista dei file di input e li copio nella nuova directory
+    # aggiorno la lista dei file di input
     opendir (DIR, $sourcedir);
-    my @filelist = grep { /^prep-LIG-(.+)-complex.mae$/ } readdir(DIR);
+    my @filelist = grep { /^(.+)-complex\.mae$/ } readdir(DIR);
     close DIR;
     undef %iofiles;
     foreach my $filename (@filelist) {
-        my ($basename) = $filename =~ /^prep-LIG-(.+)-complex.mae$/;
+        my ($basename) = $filename =~ /^(.+)-complex\.mae$/;
         $iofiles{$basename}= $filename;
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
     }
-    
-    # definisco le shell a cui applicare i constraint
-    unless ($substructure) {
-        opendir (DIR, $homedir);
-        my @filelist = grep { /.sbc$/ } readdir(DIR);
-        close DIR;
-        $substructure = $filelist[0];
-    }
-    open(SBC, '<' . $homedir . '/' . $substructure);
-    my $sbccontent;
-    while (my $newline = <SBC>) {
-        $sbccontent .= $newline;
-    }
-    close SBC;
     
     # creo l'input file per MacroModel
     printf("\n%s shell minimization with MacroModel\n", clock());
     foreach my $basename (keys %iofiles) {
-        # minimizzazione a shell con 1500 steps di Truncated Newton Coinugated Gradient (TNCG)
+        # minimizzazione a shell
         my $incontent = <<ROGER
 INPUT_STRUCTURE_FILE $iofiles{$basename}
-OUTPUT_STRUCTURE_FILE mini-LIG-$basename.maegz
+OUTPUT_STRUCTURE_FILE mini-$basename.maegz
 JOB_TYPE MINIMIZATION
-FORCE_FIELD OPLS_2005
-SOLVENT Water
 USE_SUBSTRUCTURE_FILE True
-MINI_METHOD TNCG
-MAXIMUM_ITERATION 1500
-CONVERGE_ON Gradient
 ROGER
         ;
-        open(INFILE, '>' . "mini-LIG-$basename.in");
+        # aggiungo parametri specifici dal file di configurazione
+        $incontent .= $rc_contents->{'mini'};
+    
+        open(INFILE, '>' . "mini-$basename.in");
         print INFILE $incontent;
         close INFILE;
         
-        # devo fare una copia del file sbc per ogni modello, il basename del file deve essere identico al basename del file mae di input
+        # devo fare una copia del file sbc per ogni modello, uso il templato
+        # fornito dal file di configurazione il basename del file deve essere
+        # identico al basename del file mae di input
         my $sbcfilename = $iofiles{$basename};
         $sbcfilename =~ s/mae$/sbc/;
         open(INFILE, '>' . $sbcfilename);
-        print INFILE $sbccontent;
+        print INFILE $rc_contents->{'sbc'};
         close INFILE;
         
         # lancio la minimizzazione
@@ -428,7 +478,9 @@ export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'macromodel'} mini-LIG-$basename.in -NOJOBID > mini-LIG-$basename.log
+cp $sourcedir/$iofiles{$basename} $destdir;
+$bins{'macromodel'} mini-$basename.in -NOJOBID > mini-$basename.log;
+rm $iofiles{$basename};
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -439,7 +491,7 @@ ROGER
     my $summary_file = 'SUMMARY.csv';
     my $summary_content = "MODEL;ENERGY;GRADIENT\n";
     foreach my $basename (keys %iofiles) {
-        my $logfile = "mini-LIG-$basename.log";
+        my $logfile = "mini-$basename.log";
         if (-e $logfile) {
             open(LOG, '<' . $logfile);
             while (my $newline = <LOG>) {
@@ -461,12 +513,10 @@ ROGER
     
     printf("\n%s compressing intermediate files\n", clock());
     my $tozip = '';
-    qx/rm -f *.pdb/; # i modelli iniziali
     foreach my $basename (keys %iofiles) {
-        $tozip .= " prep-LIG-$basename-complex.mae";
-        $tozip .= " mini-LIG-$basename.in";
-        $tozip .= " mini-LIG-$basename.com";
-        $tozip .= " prep-LIG-$basename-complex.sbc";
+        $tozip .= " mini-$basename.in";         # run input file
+        $tozip .= " mini-$basename.com";        # run input file in formato com
+        $tozip .= " $basename-complex.sbc";     # shell di minimizzazione
     }
     $cmdline = <<ROGER
 cd $destdir;
@@ -487,61 +537,51 @@ STEP3: {
     
     # aggiorno la lista dei file di input e li copio nella nuova directory
     opendir (DIR, $sourcedir);
-    my @filelist = grep { /^mini-LIG-(.+).maegz$/ } readdir(DIR);
+    my @filelist = grep { /^mini-(.+)\.maegz$/ } readdir(DIR);
     close DIR;
     undef %iofiles;
     foreach my $filename (@filelist) {
-        my ($basename) = $filename =~ /^mini-LIG-(.+).maegz$/;
+        my ($basename) = $filename =~ /^mini-(.+)\.maegz$/;
         $iofiles{$basename}= $filename;
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
     }
     
     # estraggo ligando e recettore
     printf("\n%s parsing mimimized models\n", clock());
     foreach my $basename (keys %iofiles) {
-        $cmdline = "$bins{'run'} $bins{'pv_convert'} -l $iofiles{$basename}";
+        $cmdline = <<ROGER
+$bins{'run'} $bins{'pv_convert'} -r $sourcedir/$iofiles{$basename};
+mv $sourcedir/mini-$basename\_recep.maegz $destdir/$basename\_recep.maegz;
+$bins{'run'} $bins{'pv_convert'} -l $sourcedir/$iofiles{$basename};
+$bins{'structconvert'} -imae $sourcedir/mini-$basename\_lig.maegz -omae $basename\_lig.mae;
+rm $sourcedir/mini-$basename\_lig.maegz;
+ROGER
+        ;
         qx/$cmdline/;
-        $cmdline = "$bins{'run'} $bins{'pv_convert'} -r $iofiles{$basename}";
-        qx/$cmdline/;
-        $cmdline = "$bins{'structconvert'} -imae mini-LIG-$basename\_1_lig.maegz -omae mini-LIG-$basename\_1_lig.mae";
-        qx/$cmdline/;
-        unlink "mini-LIG-$basename\_1_lig.maegz";
         print "    <$basename> parsed\n";
     }
     
     printf("\n%s generating grid\n", clock());
-    
-    # definisco le shell a cui applicare i constraint
-    unless ($gridsize) {
-        opendir (DIR, $homedir);
-        my @filelist = grep { /.grid$/ } readdir(DIR);
-        close DIR;
-        $gridsize = $filelist[0];
-    }
-    open(GRD, '<' . $homedir . '/' . $gridsize);
-    my $grdcontent;
-    while (my $newline = <GRD>) {
-        $grdcontent .= $newline;
-    }
-    close GRD;
-    
     foreach my $basename (keys %iofiles) {
-        # calcolo il centro della griglia usando le coordinate atomiche del ligando estratto precedentemente
-        $cmdline = "$bins{'compute_centroid'} mini-LIG-$basename\_1_lig.mae; ";
-        $cmdline .= "cat centroid-mini-LIG-$basename\_1_lig.txt";
+        # calcolo il centro della griglia
+        $cmdline = <<ROGER
+$bins{'compute_centroid'} $basename\_lig.mae;
+cat centroid-$basename\_lig.txt
+ROGER
+        ;
         my $grid_center = qx/$cmdline/;
         
         # input file per definire la griglia
+        # le dimensioni della griglia vengono specificate dal file di configurazione
         my $incontent = <<ROGER
 GRIDLIG YES
 USECOMPMAE YES
-$grdcontent
+$rc_contents->{'grid'}
 $grid_center
-GRIDFILE $basename-grid-LIG.zip
-RECEP_FILE mini-LIG-$basename\_1_recep.maegz
+GRIDFILE grid-$basename.zip
+RECEP_FILE $basename\_recep.maegz
 ROGER
         ;
-        open(INFILE, '>' . "grid_LIG_$basename.in");
+        open(INFILE, '>' . "grid-$basename.in");
         print INFILE $incontent;
         close INFILE;
         
@@ -551,7 +591,7 @@ export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'glide'} grid_LIG_$basename.in -NOJOBID > grid_LIG_$basename.log
+$bins{'glide'} grid-$basename.in -NOJOBID > grid-$basename.log
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -559,27 +599,14 @@ ROGER
     
     job_monitor($destdir);
     
-    printf("\n%s SUMMARY:\n", clock());
-    foreach my $basename (keys %iofiles) {
-        my $logfile = "grid_LIG_$basename.out";
-        if (-e $logfile) {
-            print "  grid prepared for molecule <$basename>\n";
-        } else {
-            croak "\nE- grid not prepared for molecule <$basename>\n\t";
-        }
-    }
-    
-    # rimuovo un po' di file inutili
-    qx/cd $destdir; rm -f *_1_lig.*/;
-    
     printf("\n%s compressing intermediate files\n", clock());
     my $tozip = '';
-    qx/rm -f *.pdb/; # i modelli iniziali
     foreach my $basename (keys %iofiles) {
-        $tozip .= " grid_LIG_$basename.in";
-        $tozip .= " grid_LIG_$basename.out";
-        $tozip .= " mini-LIG-$basename\_1_recep.maegz";
-        $tozip .= " mini-LIG-$basename.maegz";
+        $tozip .= " grid-$basename.in";                 # run input file
+        $tozip .= " grid-$basename.out";                # log verboso
+        $tozip .= " $basename\_lig.mae";                # ligando di riferimento
+        $tozip .= " $basename\_recep.maegz";            # recettore
+        $tozip .= " centroid-$basename\_lig.txt";       # coordinate del centro della griglia
     }
     $cmdline = <<ROGER
 cd $destdir;
@@ -598,6 +625,17 @@ STEP4: {
     mkdir $destdir;
     chdir $destdir;
     
+    # aggiorno la lista dei file di input
+    opendir (DIR, $sourcedir);
+    my @filelist = grep { /^grid-(.+)\.zip$/ } readdir(DIR);
+    close DIR;
+    undef %iofiles;
+    foreach my $filename (@filelist) {
+        my ($basename) = $filename =~ /^grid-(.+)\.zip$/;
+        $iofiles{$basename}= $filename;
+    }
+    
+    # cerco la lista dei leganti (se uso DONKEY con l'opzione -j)
     unless ($ligands) {
         opendir(DIR, $homedir);
         my @file_list = grep { /\.maegz$/ } readdir(DIR);
@@ -605,36 +643,19 @@ STEP4: {
         $ligands = $file_list[0];
     }
     
-    # aggiorno la lista dei file di input e li copio nella nuova directory
-    copy("$homedir/$ligands", $destdir);
-    opendir (DIR, $sourcedir);
-    my @filelist = grep { /^(.+)-grid-LIG.zip$/ } readdir(DIR);
-    close DIR;
-    undef %iofiles;
-    foreach my $filename (@filelist) {
-        my ($basename) = $filename =~ /^(.+)-grid-LIG.zip$/;
-        $iofiles{$basename}= $filename;
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
-    }
-    
     printf("\n%s launch GlideXP\n", clock());
     foreach my $basename (keys %iofiles) {
         # input file per il docking
-        # NOTA: nella versione 2014 hanno introdotto due flag per gestire gli alogeni come accettori/donatori di interazioni tipo Hbond (HBOND_ACCEP_HALO e HBOND_DONOR_HALO di default disabilitate); da notare che i ff disponibili per Glide sono ancora OPLS2001 e OPLS2005
         my $incontent = <<ROGER
-POSES_PER_LIG 1
-POSTDOCK NO
-WRITE_RES_INTERACTION YES
-WRITE_XP_DESC YES
-USECOMPMAE YES
-MAXREF 800
-RINGCONFCUT 2.500000
-GRIDFILE $iofiles{$basename}
-LIGANDFILE $ligands
-PRECISION XP
+GRIDFILE $sourcedir/$iofiles{$basename}
+LIGANDFILE $homedir/$ligands
 ROGER
         ;
-        open(INFILE, '>' . "BestXP_$basename.in");
+        
+        # parametri dal file di configurazione
+        $incontent = $rc_contents->{'glide'} . $incontent;
+        
+        open(INFILE, '>' . "glide-$basename.in");
         print INFILE $incontent;
         close INFILE;
         
@@ -644,7 +665,7 @@ export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'glide'} BestXP_$basename.in -NOJOBID > BestXP_$basename.log
+$bins{'glide'} glide-$basename.in -NOJOBID > glide-$basename.log
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -655,7 +676,7 @@ ROGER
     my $summary_file = 'SUMMARY.csv';
     my $summary_content = "MODEL;LIGAND;GlideScore;Emodel;E;Eint\n";
     foreach my $basename (keys %iofiles) {
-        my $logfile = "BestXP_$basename.log";
+        my $logfile = "glide-$basename.log";
         if (-e $logfile) {
             open(LOG, '<' . $logfile);
             my $ligand;
@@ -681,11 +702,10 @@ ROGER
     close SUM;
     
     printf("\n%s compressing intermediate files\n", clock());
-    my $tozip = " $ligands";
+    my $tozip = '';
     foreach my $basename (keys %iofiles) {
-        $tozip .= " BestXP_$basename.in";
-        $tozip .= " BestXP_$basename.out";
-        $tozip .= " $basename-grid-LIG.zip";
+        $tozip .= " glide-$basename.in";        # run input file
+        $tozip .= " glide-$basename.out";       # log verboso
     }
     $cmdline = <<ROGER
 cd $destdir;
@@ -704,52 +724,39 @@ STEP5: {
     mkdir $destdir;
     chdir $destdir;
     
-    # aggiorno la lista dei file di input e li copio nella nuova directory
+    # aggiorno la lista dei file di input
     opendir (DIR, $sourcedir);
-    my @filelist = grep { /^BestXP_(.+)\_pv.maegz$/ } readdir(DIR);
+    my @filelist = grep { /^glide-(.+)_pv\.maegz$/ } readdir(DIR);
     close DIR;
     undef %iofiles;
     foreach my $filename (@filelist) {
-        my ($basename) = $filename =~ /^^BestXP_(.+)\_pv.maegz$/;
+        my ($basename) = $filename =~ /^glide-(.+)_pv\.maegz$/;
         $iofiles{$basename}= $filename;
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
     }
-    
-    # definisco le shell a cui applicare i constraint
-    unless ($substructure) {
-        opendir (DIR, $homedir);
-        my @filelist = grep { /.sbc$/ } readdir(DIR);
-        close DIR;
-        $substructure = $filelist[0];
-    }
-    open(SBC, '<' . $homedir . '/' . $substructure);
-    my $sbccontent;
-    while (my $newline = <SBC>) {
-        $sbccontent .= $newline;
-    }
-    close SBC;
     
     # splitto il pose viewer di ogni complesso di modo da ottenere un mae per ogni posa
     printf("\n%s parsing pose viewer files\n", clock());
     foreach my $basename (keys %iofiles) {
-        $cmdline = "$bins{'run'} $bins{'pv_convert'} -m $iofiles{$basename}";
-        qx/$cmdline/;
-        $cmdline = "$bins{'structconvert'} -imae BestXP_$basename\_complex.maegz -omae BestXP_$basename-complexes.mae";
-        qx/$cmdline/;
-        unlink "BestXP_$basename\_complex.maegz";
-        $cmdline = "$bins{'split_complexes'} BestXP_$basename-complexes.mae";
+        $cmdline = <<ROGER
+$bins{'run'} $bins{'pv_convert'} -m $sourcedir/$iofiles{$basename};
+mv $sourcedir/glide-$basename\_complex.maegz $destdir/$basename\_complex.maegz;
+$bins{'structconvert'} -imae $basename\_complex.maegz -omae $basename-complexes.mae;
+rm $basename\_complex.maegz;
+$bins{'split_complexes'} $basename-complexes.mae;
+rm $basename-complexes.mae;
+ROGER
+        ;
         qx/$cmdline/;
         print "    <$basename> parsed\n";
     }
     
     # reinizializzo la lista dei file di input
-    my %old_iofiles = %iofiles;
     undef %iofiles;
     opendir(DIR, $destdir);
     my @file_list = grep { /-complex-\d+\.mae$/ } readdir(DIR);
     closedir DIR;
     foreach my $infile (@file_list) {
-        my ($basename) = $infile =~ /^BestXP_(.+)\.mae$/;
+        my ($basename) = $infile =~ /^(.+)\.mae$/;
         $iofiles{$basename} = $infile;
     }
     
@@ -757,61 +764,35 @@ STEP5: {
     # creo l'input file per MacroModel
     foreach my $basename (keys %iofiles) {
         # RUN INPUT FILE
-        my $incontent; my $infilename;
-        if ($PLANARIZE) {
-            # per forzare la planarità sui sistemi aromatici il run input file deve essere scritto nel formato .com meno leggibile (MacroModel converte comunque il formato .in in formato .com prima di lanciare i job)
-            $incontent .= <<ROGER
+        my $incontent = <<ROGER
 $iofiles{$basename}
-minipostXP-$basename.maegz
- DEBG       0      0      0      0     0.0000     0.0000     0.0000     0.0000
- SOLV       3      1      0      0     0.0000     0.0000     0.0000     0.0000
- BDCO       0      0      0      0     0.0000 99999.0000     0.0000     0.0000
- FFLD      14      1      0      0     1.0000     0.0000     1.0000     0.0000
- BGIN       0      0      0      0     0.0000     0.0000     0.0000     0.0000
- SUBS       0      0      0      0     0.0000     0.0000     0.0000     0.0000
- READ       0      0      0      0     0.0000     0.0000     0.0000     0.0000
- CONV       2      0      0      0     0.0500     0.0000     0.0000     0.0000
- MINI       9      0   1500      0     0.0000     0.0010     0.0000     0.0000
- END        0      0      0      0     0.0000     0.0000     0.0000     0.0000
+minipost-$basename.maegz
 ROGER
-            ;
-            $infilename = "minipostXP-$basename.com";
-        } else {
-            $incontent = <<ROGER
-INPUT_STRUCTURE_FILE $iofiles{$basename}
-OUTPUT_STRUCTURE_FILE minipostXP-$basename.maegz
-JOB_TYPE MINIMIZATION
-FORCE_FIELD OPLS_2005
-SOLVENT Water
-USE_SUBSTRUCTURE_FILE True
-MINI_METHOD TNCG
-MAXIMUM_ITERATION 1500
-CONVERGE_ON Gradient
-ROGER
-            ;
-            $infilename = "minipostXP-$basename.in";
-        }
-        
-        open(INFILE, '>' . $infilename);
+        ;
+        # vedi file di conifgurazione per i parametri di minimizzazione
+        $incontent .= $rc_contents->{'post'};
+        open(INFILE, '>' . "minipost-$basename.com");
         print INFILE $incontent;
         close INFILE;
         
-        # devo fare una copia del file sbc per ogni modello, il basename del file deve essere identico al basename del file mae di input
+        # devo fare una copia del file sbc per ogni modello, uso il templato
+        # fornito dal file di configurazione il basename del file deve essere
+        # identico al basename del file mae di input
         my $sbcfilename = $iofiles{$basename};
         $sbcfilename =~ s/mae$/sbc/;
         open(INFILE, '>' . $sbcfilename);
-        print INFILE $sbccontent;
+        print INFILE $rc_contents->{'sbc'};
         close INFILE;
         
         # lancio la minimizzazione
-        my $suffix = ($PLANARIZE)? 'com' : 'in'; # quale formato di run input file scelgo?
+#         my $suffix = ($PLANARIZE)? 'com' : 'in'; # quale formato di run input file scelgo?
         $cmdline = <<ROGER
 #!/bin/bash
 export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'macromodel'} minipostXP-$basename.$suffix -NOJOBID > minipostXP-$basename.log
+$bins{'macromodel'} minipost-$basename.com -NOJOBID > minipost-$basename.log
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -820,36 +801,16 @@ ROGER
     job_monitor($destdir);
     
     my $summary_file = 'SUMMARY.csv';
-    my $summary_content = "COMPLEX;LIGAND;ENERGY;GRADIENT\n";
+    my $summary_content = "MODEL;ENERGY;GRADIENT\n";
     foreach my $basename (keys %iofiles) {
-        my $logfile = "minipostXP-$basename.log";
-        my $posefile = $iofiles{$basename};
+        my $logfile = "minipost-$basename.log";
         if (-e $logfile) {
-            my $ligand_line = 'null';
-            open(MAE, '<' . $posefile);
-            while (my $newline = <MAE>) {
-                chomp $newline;
-                if ($newline =~ / i_m_ct_format/) {
-                    $newline = <MAE>;
-                    if ($newline =~ / :::/) {
-                        $ligand_line = <MAE>;
-                        $ligand_line =~ s/^ :://; # il nome del ligando ha solitamente questo prefisso nel file mae
-                        $ligand_line =~ s/[\n :"\\\/]//g;
-                        $summary_content .= "$basename;$ligand_line;";
-                        last;
-                    }
-                    
-                }
-                $ligand_line = $newline;
-            }
-            close MAE;
-            
             open(LOG, '<' . $logfile);
             while (my $newline = <LOG>) {
                 chomp $newline;
                 if ($newline =~ /^ Conf/) {
                     my ($energy,$gradient) = $newline =~ /E = +([\d\.\-]+) \( *([\d\.]+)/;
-                    $summary_content .= "$energy;$gradient\n";
+                    $summary_content .= "$basename;$energy;$gradient\n";
                 }
             }
             close LOG;
@@ -862,20 +823,13 @@ ROGER
     print SUM $summary_content;
     close SUM;
     
-    # rimuovo un po' di file inutili
-    qx/cd $destdir; rm -f BestXP_*_pv.maegz/;
-    
     printf("\n%s compressing intermediate files\n", clock());
     my $tozip = '';
-    foreach my $basename (keys %old_iofiles) {
-        $tozip .= " BestXP_$basename-complexes.mae";
-    }
     foreach my $basename (keys %iofiles) {
-        $tozip .= " BestXP_$basename.mae";
-        $tozip .= " BestXP_$basename.sbc";
-        $tozip .= " minipostXP-$basename.in" unless ($PLANARIZE);
-        $tozip .= " minipostXP-$basename.com";
-    }
+        $tozip .= " $basename.mae";             # complesso da minimizzare
+        $tozip .= " minipost-$basename.com";    # run input file in formato com
+        $tozip .= " $basename.sbc";             # shell di minimizzazione
+    } 
     $cmdline = <<ROGER
 cd $destdir;
 tar -c $tozip | gzip -c9 > intermediate.tar.gz;
@@ -883,6 +837,7 @@ rm -rfv $tozip;
 ROGER
     ;
     qx/$cmdline/;
+    
 }
 
 STEP6: {
@@ -893,23 +848,25 @@ STEP6: {
     mkdir $destdir;
     chdir $destdir;
     
-    # reinizializzo la lista dei file di input
+    # aggiorno la lista dei file di input
+    opendir (DIR, $sourcedir);
+    my @filelist = grep { /^minipost-(.+)\.maegz$/ } readdir(DIR);
+    close DIR;
     undef %iofiles;
-    opendir(DIR, $sourcedir);
-    my @file_list = grep { /minipostXP-(.*)\.maegz/ } readdir(DIR);
-    closedir DIR;
-    foreach my $infile (@file_list) {
-        my ($basename) = $infile =~ /^minipostXP-(.*)\.maegz$/;
-        $iofiles{$basename} = $infile;
-        copy("$sourcedir/$iofiles{$basename}", $destdir);
+    foreach my $filename (@filelist) {
+        my ($basename) = $filename =~ /^minipost-(.+)\.maegz$/;
+        $iofiles{$basename}= $filename;
     }
     
     # creo i file pose viewer
     printf("\n%s parsing pose viewer files\n", clock());
     foreach my $basename (keys %iofiles) {
-        $cmdline = "$bins{'run'} $bins{'pv_convert'} -p $iofiles{$basename}";
+        $cmdline = <<ROGER
+$bins{'run'} $bins{'pv_convert'} -p $sourcedir/$iofiles{$basename};
+mv $sourcedir/minipost-$basename\_1_pv.maegz $destdir/$basename\_pv.maegz
+ROGER
+        ;
         qx/$cmdline/;
-        unlink $iofiles{$basename};
         print "    <$basename> parsed\n";
     }
     
@@ -917,37 +874,9 @@ STEP6: {
     printf("\n%s MM-GBSA with Prime\n", clock());
     
     foreach my $basename (keys %iofiles) {
-        my $incontent;
-        
-        if ($PRIME_FREEZER) { # calcolo dell'energia on site, senza minimizzazioni
-            $incontent = <<ROGER
-STRUCT_FILE  minipostXP-$basename\_1_pv.maegz
-FROZEN
-ROGER
-            ;
-        } else {
-            $incontent = <<ROGER
-STRUCT_FILE  minipostXP-$basename\_1_pv.maegz
-JOB_TYPE     REAL_MIN
-OUT_TYPE     COMPLEX
-RFLEXDIST    7
-RFLEXGROUP   side
-RCONS        ((fillres within 7 (atom.i_psp_Prime_MMGBSA_Ligand 1)) AND NOT (fillres within 5 (atom.i_psp_Prime_MMGBSA_Ligand 1)))
-STR_CONS     120
-PRIME_OPT    MINIM_NITER         = 50
-PRIME_OPT    MINIM_NSTEP         = 200
-PRIME_OPT    MINIM_RMSG          = 0.01
-PRIME_OPT    MINIM_METHOD        = tn
-ROGER
-            ;
-            
-            if ($PLANARIZE) { # patch per forzare la planarità nei sistemi aromatici
-                $incontent .= 'PRIME_OPT    PLANARITY_RESTRAINT = 10';
-                $incontent .= "\n";
-            }
-        }
-        
-        open(INFILE, '>' . "prime_mmgbsa-$basename.inp");
+        my $incontent = "STRUCT_FILE  $basename\_pv.maegz\n";
+        $incontent .= $rc_contents->{'prime'}; # vedi file di configurazione
+        open(INFILE, '>' . "prime-$basename.inp");
         print INFILE $incontent;
         close INFILE;
         
@@ -958,7 +887,7 @@ export SCHRODINGER=$schrodinger
 export LM_LICENSE_FILE=$license
 
 cd $destdir;
-$bins{'prime_mmgbsa'} prime_mmgbsa-$basename.inp -NOJOBID > prime_mmgbsa-$basename.log
+$bins{'prime_mmgbsa'} prime-$basename.inp -NOJOBID > prime-$basename.log
 ROGER
         ;
         quelo($cmdline, $basename);
@@ -969,7 +898,7 @@ ROGER
     my $summary_file = 'SUMMARY.csv';
     my $summary_content = "MODEL;LIGAND;MMGBSA_dG_Bind;MMGBSA_dG_Bind(NS)\n";
     foreach my $basename (keys %iofiles) {
-        my $logfile = "prime_mmgbsa-$basename.log";
+        my $logfile = "prime-$basename.log";
         if (-e $logfile) {
             open(LOG, '<' . $logfile);
             my $recordline = 'null';
@@ -997,9 +926,9 @@ ROGER
     printf("\n%s compressing intermediate files\n", clock());
     my $tozip = '';
     foreach my $basename (keys %iofiles) {
-        $tozip .= " minipostXP-$basename\_1_pv.maegz";
-        $tozip .= " prime_mmgbsa-$basename.inp";
-        $tozip .= " prime_mmgbsa-$basename-out.csv";
+        $tozip .= " $basename\_pv.maegz";       # complesso in formato pose viewer
+        $tozip .= " prime-$basename.inp";       # run input file
+        $tozip .= " prime-$basename-out.csv";   # voci della project table
     }
     $cmdline = <<ROGER
 cd $destdir;
@@ -1020,61 +949,25 @@ STEP7: {
     
     # reinizializzo la lista dei file di input
     opendir(DIR, $sourcedir);
-    my @file_list = grep { /^prime_mmgbsa-(.*)-out\.maegz$/ } readdir(DIR);
+    my @file_list = grep { /^prime-(.*)-out\.maegz$/ } readdir(DIR);
     closedir DIR;
+    
+    # lancio lo script enedecomp_parser.pl
     printf("\n%s parsing maegz files\n", clock());
     foreach my $infile (@file_list) {
-        my ($basename) = $infile =~ /prime_mmgbsa-(.+)-out\.maegz/;
+        my ($basename) = $infile =~ /prime-(.+)-out\.maegz/;
         copy("$sourcedir/$infile", "$destdir/$basename.maegz");
         $cmdline = <<ROGER
 #!/bin/bash
 
 cd $destdir;
-$bins{'enedecomp_parser'} $basename.maegz -shell $SHELL;
+$bins{'enedecomp_parser'} $basename.maegz -shell $rc_contents->{'deco'}->{'shell'};
 rm $basename.maegz
 ROGER
         ;
         quelo($cmdline, $basename);
     }
-    
     job_monitor($destdir);
-    
-    opendir(DIR, $destdir);
-    @file_list = grep { /\.mae$/ } readdir(DIR);
-    closedir DIR;
-    printf("\n%s grouping poses per ligand\n", clock());
-    my %ligposes;
-    foreach my $infile (@file_list) {
-        my $ligand_line;
-        open(MAE, '<' . $infile);
-        while (my $newline = <MAE>) {
-            chomp $newline;
-            if ($newline =~ / i_m_ct_format/) {
-                $newline = <MAE>;
-                if ($newline =~ / :::/) {
-                    $ligand_line = <MAE>;
-                    $ligand_line =~ s/^ :://; # il nome del ligando ha solitamente questo prefisso nel file mae
-                    $ligand_line =~ s/[\n :"\\\/]//g;
-                    $ligand_line =~ s/\(/[/g;
-                    $ligand_line =~ s/\)/]/g;
-                }
-                if (exists $ligposes{$ligand_line}) {
-                    push(@{$ligposes{$ligand_line}}, $infile);
-                } else {
-                    $ligposes{$ligand_line} = [ $infile ];
-                }
-                last;
-            }
-        }
-        close MAE;
-    }
-    foreach my $ligand (keys %ligposes) {
-        print "    $ligand...";
-        my $maelist = join(' ', @{$ligposes{$ligand}});
-        $cmdline = "cat $maelist | gzip -c > ligand_$ligand.maegz";
-        qx/$cmdline/;
-        print "done\n";
-    }
     
     printf("\n%s summary of dG components\n", clock());
     # reinizializzo la lista dei file di input
@@ -1082,59 +975,59 @@ ROGER
     @file_list = grep { /\.csv$/ } readdir(DIR);
     closedir DIR;
     
-    # faccio un hash di riepilogo dei csv prodotti da enedecomp_parser.pl
+    # faccio una tabella di riepilogo dei csv prodotti da enedecomp_parser.pl
     my $csv_summary = { };
     my @pose_list;
     foreach my $infile (@file_list) {
+        
+        # ogni file csv prodotto è relativo ad una posa
         my ($pose) = $infile =~ /(.+)\.csv$/;
         push(@pose_list, $pose);
+        
+        # parso il csv prodotto per ogni posa
         open(CSV, '<' . $infile);
-        my $newline = <CSV>; # salto la prima riga d'intestazione
+        my $newline = <CSV>; # salto la prima riga (intestazione)
+         
         while ($newline = <CSV>) {
             chomp $newline;
             my @values = split(';', $newline);
+            next if ($values[2] eq 'OUT'); # il residuo è fuori dalla shell, non lo considero
             my $resi = sprintf("%04d", $values[0]);
             $csv_summary->{$resi} = { }
                 unless (exists $csv_summary->{$resi});
-            my $dg_tot = $values[3];
-            my $coulomb = $values[4] + $values[5] + $values[11]; # Hbond + Coulomb + SelfCont
-            my $vdw = $values[6] + $values[7]; # Packing + vdW
-            my $solv = $values[8] + $values[9]; # Lipo + SolvGB
+            my $dg_tot = $values[4];
+            my $coulomb = $values[5] + $values[6] + $values[12]; # Hbond + Coulomb + SelfCont
+            my $vdw = $values[7] + $values[8];                   # Packing + vdW
+            my $solv = $values[9] + $values[10];                 # Lipo + SolvGB
             $csv_summary->{$resi}->{$pose} = [ $dg_tot, $coulomb, $vdw, $solv ];
         }
+        
         close CSV;
     }
     
-    my %pose2lig;
-    foreach my $ligand (keys %ligposes) {
-        foreach my $mae (@{$ligposes{$ligand}}) {
-            my ($pose) = $mae =~ /(.+)\.mae$/;
-            $pose2lig{$pose} = $ligand;
-        }
-    }
-    
     # filtro solo i residui condivisi almeno dal $ratio delle pose
-    my $ref = scalar keys %pose2lig;
-    my $ratio = 0.75;
-#     printf("    Entries parsed.....: %d\n", scalar keys %{$csv_summary});
+    my $ref = scalar @pose_list; # numero totale di pose
+    my $ratio = $rc_contents->{'deco'}->{'ratio'};
+    printf("    Entries parsed.....: %d\n", scalar keys %{$csv_summary});
     foreach my $res (keys %{$csv_summary}) {
         my $tot = scalar keys %{$csv_summary->{$res}};
         if ($tot <= ($ref * $ratio)) {
             delete $csv_summary->{$res};
         }
     }
-#     printf("    Entries filtered...: %d\n", scalar keys %{$csv_summary});
+    printf("    Entries filtered...: %d\n", scalar keys %{$csv_summary});
     
     # Scrivo il csv di riepilogo
     my %outfile = ('dG' => '0', 'Coulomb' => '1', 'VdW' => '2', 'Solv' => '3');
     foreach my $filename (keys %outfile) {
         print "    $filename term...";
         open(CSV, '>' . 'enedecomp_' . $filename . '.csv');
-        my $header = 'POSE;LIGAND;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
+        my $header = 'MODEL;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
         print CSV $header;
+        
         my %resi_values;
         foreach my $pose (@pose_list) {
-            my $row = $pose . ';' . $pose2lig{$pose};
+            my $row = $pose;
             foreach my $resi (sort keys %{$csv_summary}) {
                 $resi_values{$resi} = [ ] unless (exists $resi_values{$resi});
                 if (exists $csv_summary->{$resi}->{$pose}) {
@@ -1165,7 +1058,7 @@ ROGER
         my $separator = ';' x 3 . ";\n";
         print CSV $separator;
         foreach my $statlabel (sort keys %statlabels) {
-            my $row = ';' . $statlabels{$statlabel};
+            my $row = $statlabels{$statlabel};
             foreach my $resi (sort keys %resi_stats) {
                 $row .= sprintf(";%.3f", $resi_stats{$resi}->[$statlabel]);
             }
@@ -1178,7 +1071,8 @@ ROGER
     }
     
     my $tot_records = scalar @pose_list;
-    
+    my $wider = 15 * scalar keys %{$csv_summary};
+    $wider = 1280 if ($wider < 1280); # larghezza minima dell'immagine
     printf("\n%s creating box plots...", clock());
     my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_dG.csv", "enedecomp_Solv.csv"';
     my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_dG.png", "enedecomp_Solv.png"';
@@ -1194,7 +1088,7 @@ whiskers<-function(infile,outfile) {
             colcol = c(colcol, "blue");
         }
     }
-    png(filename = outfile,  width = 1280, height = 800)
+    png(filename = outfile,  width = $wider, height = 800)
     boxplot(input.subset, notch = FALSE, las = 2, col = colcol);
     abline(h = 0, lty = 2);
     dev.off();
@@ -1214,10 +1108,11 @@ ROGER
     qx/$bins{'R'} boxplot.R/;
     print "done\n";
     
+    # comprimo i csv prodotti da enedecomp_parser.pl e lo script per produrre i boxplot
+    printf("\n%s compressing intermediate files\n", clock());
     opendir(DIR, $destdir);
     @file_list = grep { /-complex-/ } readdir(DIR);
     closedir DIR;
-    printf("\n%s compressing intermediate files\n", clock());
     my $tozip = 'boxplot.R ' . join(' ', @file_list);
     $cmdline = <<ROGER
 cd $destdir;
@@ -1248,7 +1143,7 @@ sub quelo { # serve per lanciare job su QUEST
     qx/chmod +x $filename/; # rendo il file sh eseguibile
     
     # lancio il file sh su QUEST
-    my $string = "$bins{'quest'} -n 1 -q fast $filename";
+    my $string = "$bins{'quest'} -n $THREADSN -q slow $filename";
     qx/$string/;
     
     print "    job <$basename> submitted\n";

@@ -3,6 +3,12 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.02.c    - backup of temporary files
+#                    - updated probe selection
+#                    - compliance with enedecomp_parser 15.02.a
+#
+# release 15.02.b    - updated probe selection
+#
 # release 15.02.a    - initial release
 #
 # ##############################################################################
@@ -34,15 +40,17 @@ use Carp;
 our %opts = (
     'SHELL'     => 5.5,         # shell by which residues will be considered during enedecomp analysis
     'RATIO'     => 0.75,        # how many poses/residue retain (lower threshold)?
+    
+    'INTERMEDIATES'     => '',
 );
-our $riceddario = $ENV{RICEDDARIOHOME};
+our $pandora = $ENV{PANDORAHOME};
 our $workdir = getcwd();
 our $tempus = "$workdir/.RankPride.PRIME";
 our $infiles = { 'REFERENCE' => [ ], 'QUERY' => [ ] };
 our %bins = (
-    'quest'             => $riceddario . '/Qlite' . '/QUEST.client.pl',
-    'enedecomp_parser'  => $riceddario . '/third_parties/SCHRODINGER' . '/enedecomp_parser.pl',
-    'RankPride'         => $riceddario . '/unsorted/PERL' . '/RankPride.pl',
+    'quest'             => $pandora . '/QUEST/QUEST.client.pl', # gestore di code mio
+    'enedecomp_parser'  => $pandora . '/Maestro_Script/enedecomp_parser.pl',
+    'RankPride'         => $pandora . '/utilities_tools/RankPride.pl',
 );
 
 ## SBLOG ##
@@ -52,11 +60,11 @@ mkdir $tempus; # prima di tutto creo una tempdir
 USAGE: {
     use Getopt::Long;no warnings;
     my $help;
-    GetOptions('help|h' => \$help, 'shell|s=f' => \$opts{'SHELL'}, 'ratio|r=f' => \$opts{'RATIO'});
+    GetOptions('help|h' => \$help, 'shell|s=f' => \$opts{'SHELL'}, 'ratio|r=f' => \$opts{'RATIO'}, 'inter|i' => \$opts{'INTERMEDIATES'});
     my $header = <<ROGER
 ********************************************************************************
 RankPride for PRIME
-release 15.02.a
+release 15.02.c
 
 Copyright (c) 2015, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -83,16 +91,40 @@ define the free energy of binding of a specific receptor::ligand complex.
 Input files are pose viewer files (in maegz format), each of them must contains 
 a single pose. Such files are obtained from <prime_mmgbsa> job runs.
 
-Prior to launch the FURANO script the input files must be moved in two folders 
-defining the "REFERENCE" and the "QUERY" complexes, respectively.
+Prior to launch the script the input files must be moved in two folders defining
+the "REFERENCE" and the "QUERY" complexes, respectively.
 
 
 *** OPTIONS ***
+    -inter|i            keep intermediate files (compressed in a tarball)
+
     -ratio|r <float>    ratio of the minimal number of poses per residue to 
                         retain (default: $opts{'RATIO'})
     
     -shell|s <float>    shell, in Angstrom, by which residues will be considered
                         for energy decomposition analysis (default: $opts{'SHELL'} A)
+
+
+*** OUTPUT ***
+
+The script produces a csv file called <rankprod.csv> with a content like this:
+
+    PROBE;LOG(RP);Evalue
+    R0199;2.1150e-01;3.0000e-04
+    R0200;8.5183e-02;1.9720e-01
+    R0195;-1.5304e-01;1.5500e-02
+    R0117;-4.7448e-02;4.8240e-01
+    [...]
+
+The "PROBE" column indicate the probe names.
+
+The "LOG(RP)" column is the rank product score. For each probe, the more 
+positive score defines a more positive delta between values of QUERY dataset 
+versus REFERENCE dataset. Viceversa, the more negative score defines a more n
+egative delta between values of QUERY dataset versus REFERENCE dataset.
+
+The "Evalue" column indicates how much significant is the rank product score, 
+based on an amount of random permutations of input data (defined with option -p).
 ROGER
         ;
         print $spiega;
@@ -132,9 +164,14 @@ READY2GO: {
 
 ENEDECOMP: {
     print "\n*** ENERGY DECOMPOSITION ***\n";
+    
+    my %probes;
+    my $csv_summary = { };
+    my %pose_list;
+    
     foreach my $dataset (keys $infiles) {
-        my $csv_summary = { };
         chdir $tempus;
+        $csv_summary->{$dataset} = { };
         printf("\n%s Processing %s data\n", clock(), $dataset);
         foreach my $maegz (@{$infiles->{$dataset}}) {
             my ($jobname) = $maegz =~ m/(.*)\.maegz$/;
@@ -144,7 +181,7 @@ ENEDECOMP: {
 cp $workdir/$dataset/$maegz $tempus;
 cd $tempus;
 $bins{'enedecomp_parser'} $maegz -shell $opts{'SHELL'};
-rm $jobname.mae*;
+rm $jobname.mae;
 ROGER
             ;
             quelo($cmdline, $jobname);
@@ -156,53 +193,65 @@ ROGER
         my @file_list = grep { /\.csv$/ } readdir(DIR);
         closedir DIR;
         
-        my @pose_list;
+        $pose_list{$dataset} = [ ];
         foreach my $infile (@file_list) {
             my ($pose) = $infile =~ /(.+)\.csv$/;
-            push(@pose_list, $pose);
+            push(@{$pose_list{$dataset}}, $pose);
             open(CSV, '<' . $infile);
             my $newline = <CSV>; # salto la prima riga d'intestazione
             while ($newline = <CSV>) {
                 chomp $newline;
                 my @values = split(';', $newline);
                 my $resi = sprintf("%04d", $values[0]);
-                $csv_summary->{$resi} = { }
-                    unless (exists $csv_summary->{$resi});
-                my $dg_tot = $values[3];
-                $csv_summary->{$resi}->{$pose} = $dg_tot;
+                $csv_summary->{$dataset}->{$resi} = { }
+                    unless (exists $csv_summary->{$dataset}->{$resi});
+                my $dg_tot = $values[4];
+                my $inout = $values[2];
+                $csv_summary->{$dataset}->{$resi}->{$pose} = [ $inout, $dg_tot ];
             }
             close CSV;
-            unlink $infile;
         }
         
-        # filtro solo i residui condivisi almeno dal $opts{'RATIO'} delle pose
+        # per ogni residuo conto per quante pose ricade entro la shell
+        # se il numero delle volte è maggiore di $opts{'RATIO'} lo annoto
         my $ref = scalar @{$infiles->{$dataset}};
-        printf("    Entries parsed.....: %d\n", scalar keys %{$csv_summary});
-        foreach my $res (keys %{$csv_summary}) {
-            my $tot = scalar keys %{$csv_summary->{$res}};
-            if ($tot <= ($ref * $opts{'RATIO'})) {
-                delete $csv_summary->{$res};
+        for my $res (keys %{$csv_summary->{$dataset}}) {
+            my $tot = 0;
+            for my $pose (keys %{$csv_summary->{$dataset}->{$res}}) {
+                my $isin = $csv_summary->{$dataset}->{$res}->{$pose}->[0];
+                $tot++ if ($isin eq 'IN');
+            }
+            if ($tot >= ($ref * $opts{'RATIO'})) {
+                    if (exists $probes{$res}) {
+                        $probes{$res} .= ' | ' . $dataset;
+                    } else {
+                        $probes{$res} = $dataset;
+                    }
             }
         }
-        printf("    Entries filtered...: %d\n", scalar keys %{$csv_summary});
+        
+        # sposto i tempfile prodotti da enedecomp_parser altrove
+        my $moving = <<ROGER
+cd $tempus;
+mkdir $dataset;
+mv *.maegz $tempus/$dataset;
+mv *.csv $tempus/$dataset;
+ROGER
+        ;
+        qx/$moving/;
+    }
     
-        # Scrivo il csv di riepilogo
-        chdir $workdir;
+    # Scrivo i file csv di riepilogo
+    chdir $workdir;
+    for my $dataset (keys %{$csv_summary}) {
         open(CSV, '>' . 'enedecomp_' . $dataset . '.csv');
-        my $header = 'POSE;res_' . join(';res_', sort keys %{$csv_summary}) . "\n";
+        my $header = 'POSE;res_' . join(';res_', sort keys %probes) . "\n";
         print CSV $header;
-        my %resi_values;
-        foreach my $pose (@pose_list) {
+        foreach my $pose (@{$pose_list{$dataset}}) {
             my $row = $pose;
-            foreach my $resi (sort keys %{$csv_summary}) {
-                $resi_values{$resi} = [ ] unless (exists $resi_values{$resi});
-                if (exists $csv_summary->{$resi}->{$pose}) {
-                    my $value = $csv_summary->{$resi}->{$pose};
-                    $row .= ';' . $value;
-                    push(@{$resi_values{$resi}}, $value);
-                } else {
-                    $row .= ';NA';
-                }
+            foreach my $resi (sort keys %probes) {
+                my $value = $csv_summary->{$dataset}->{$resi}->{$pose}->[1];
+                $row .= ';' . $value;
             }
             $row .= "\n";
             print CSV $row;
@@ -216,13 +265,13 @@ RANKPROD: {
     
     # preparo l'hash di input
     my $intable = { };
-    my %infiles = (
-        'REFERENCE'  => 'enedecomp_REFERENCE.csv',
-        'QUERY'      => 'enedecomp_QUERY.csv'
+    my %incsv = (
+        'datasetA.csv'  => 'enedecomp_QUERY.csv',
+        'datasetB.csv'  => 'enedecomp_REFERENCE.csv'
     );
-    for my $dataset (keys %infiles) {
+    for my $dataset (keys %incsv) {
         $intable->{$dataset} = { };
-        open(CSV, '<' . $infiles{$dataset});
+        open(CSV, '<' . $incsv{$dataset});
         my $header = <CSV>;
         chomp $header;
         my @probe_names = split(';', $header);
@@ -234,32 +283,16 @@ RANKPROD: {
             my @values = split(';', $newline);
             foreach my $i (1..scalar(@values)-1) {
                 my $value = $values[$i];
-                $value = '0.000' if ($value =~ m/NA/);
                 push(@{$intable->{$dataset}->{$probe_names[$i]}}, $value);
             }
         }
         close CSV;
     }
     
-    # seleziono solo i probes comuni tra reference e query
-    my @A = keys %{$intable->{'REFERENCE'}};
-    my @B = keys %{$intable->{'QUERY'}};
-    my @shared;
-    for my $A_elem (0..(scalar @A)-1) {
-        for my $B_elem (0..(scalar @B)-1) {
-            if ($A[$A_elem] eq $B[$B_elem]) {
-                push(@shared, $A[$A_elem]);
-            }
-        }
-    }
-    printf("\n%s Probes summary\n", clock());
-    printf("    reference.: %d\n", scalar @A);
-    printf("    query.....: %d\n", scalar @B);
-    printf("    shared....: %d\n", scalar @shared);
-    
     # scrivo i file csv di input per lo script RankPride
+    my @shared = sort keys %{$intable->{'datasetA.csv'}};
     for my $dataset (keys %{$intable}) {
-        my $outfile = $tempus . "/$dataset.shared.csv";
+        my $outfile = "$tempus/$dataset";
         open(CSV, '>' . $outfile);
         my $string = join(';', @shared) . "\n";
         print CSV $string;
@@ -267,7 +300,9 @@ RANKPROD: {
         for my $replica (0..$replicas-1) {
             $string = '';
             for my $probe (@shared) {
-                $string .= $intable->{$dataset}->{$probe}->[$replica] . ';';
+                my $value = $intable->{$dataset}->{$probe}->[$replica];
+                $value = 'NA' unless ($value);
+                $string .= $value . ';';
             }
             $string =~ s/;$/\n/;
             print CSV $string;
@@ -282,8 +317,10 @@ RANKPROD: {
 #!/bin/bash
 
 cd $tempus;
-$bins{'RankPride'} QUERY.shared.csv REFERENCE.shared.csv;
+$bins{'RankPride'} datasetA.csv datasetB.csv;
 mv rankprod.csv ..;
+mv enedecomp_REFERENCE.csv ..;
+mv enedecomp_QUERY.csv ..;
 ROGER
     ;
     quelo($cmdline, 'RankPride');
@@ -291,8 +328,26 @@ ROGER
     chdir $workdir;
 }
 
+CLEANSWEEP: {
+    if ($opts{'INTERMEDIATES'}) {
+        print "\n\n*** BACKUP ***\n";
+        
+        printf("\n%s compressing temp files...\n", clock());
+        my $script = <<ROGER
+cd $tempus;
+cd ..;
+mv $tempus TEMPUS;
+tar -c TEMPUS | gzip -c9 > TEMPUS.tar.gz;
+rm -r TEMPUS
+ROGER
+        ;
+        qx/$script/;
+    } else {
+        qx/rm -r $tempus/; # rimuovo la directory temporanea
+    }
+}
+
 FINE: {
-    qx/rm -r $tempus/; # rimuovo la directory temporanea
     print "\n\n*** EMIRP.edirPknaR ***\n";
     exit;
 }

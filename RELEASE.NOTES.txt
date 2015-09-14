@@ -7,13 +7,26 @@ REMEMBER to read...
 
 ...before merging to 'master' branch
 
+*** release XX.YY ***
+
+*** release 15.09 ***
+- DONKEY: new release (15.04.a)
+- miniAMBER: new release (15.07.a)
+- GROMACS2AMBER: minor bugfix
+- PDB4AMBER: minor bugfix (15.04.a)
+- MM-GBSA_PPI: initial release (15.02.a)
+- RankPride.AMBER.PPI: initial release (15.02.a)
+- RankPride.PRIME: new release (15.02.c)
+- RankPride: updates
+- enedecomp_parser: new release (15.02.a)
+
 *** release 15.02 ***
 - QUEST: added 'QUEST.kill.queued.pl' script to mass kill the queued jobs
-- PDB2CASTp.pl: updated URL of the CASTp webserver
+- PDB2CASTp: updated URL of the CASTp webserver
 - DONKEY: initial release (15.01.a)
-- enedecomp_parser.pl: initial release (15.01.a)
-- RankPride.pl: initial release (15.02.a)
-- RankPride.PRIME.pl: initial release (15.02.a)
+- enedecomp_parser: initial release (15.01.a)
+- RankPride: initial release (15.02.a)
+- RankPride.PRIME: initial release (15.02.a)
 
 *** release 14.9 ***
 - ISABEL: new release (14.7.b)
