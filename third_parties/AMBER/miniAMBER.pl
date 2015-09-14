@@ -8,6 +8,13 @@
 # release 15.02.a        - save intermediate non-solvated parm files
 #                        - added 'drms = 0.01' to minimization steps
 #
+# release 15.02.b        - during NVT, increase temperature linearly
+#
+# release 15.07.a        - using forcefield ff14SB
+#                        - heating and equilibration steps improved
+#                        - preparation only for the complex with '-lig' option
+#                        - usable only for MPI/CUDA implementation of pmemd
+#
 # ##############################################################################
 
 use strict;
@@ -31,43 +38,50 @@ use lib $ENV{HOME};
 use Data::Dumper;
 ###################################################################
 use Cwd;
-use threads;
 
 ## GLOBS ##
 our $workdir = getcwd();
 our $basepath = $workdir . '/';
 our $AMBERHOME = $ENV{'AMBERHOME'};
-our $mpi = 'null';
+our $mpi = 4;
 our $ligprefix = 'null';
 our %bins = ( # file binari
     'tleap'     =>  $AMBERHOME . '/bin/tleap',
-    'sander'    =>  $AMBERHOME . '/bin/pmemd',
+    'sander'    =>  $AMBERHOME . '/bin/pmemd.MPI',
     'mpirun'    =>  qx/which mpirun/
 );
-our @thr;
 our $ligname;
-our $ligsander = $bins{'sander'};
+our $pmemd_enhance = 'mpi';
 our $boxtype = 'oct';
 ## SBLOG ##
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('mpi=i' => \$mpi, 'lig=s' => \$ligprefix, 'box' => \$boxtype);
-    my $usage = <<END
+    GetOptions('pmemd=s' => \$pmemd_enhance, 'mpi=i' => \$mpi, 'lig=s' => \$ligprefix, 'box' => \$boxtype);
+    
+    my $splash = <<END
 ********************************************************************************
 miniAMBER
-release 15.02.a
+release 15.07.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
 This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 ********************************************************************************
+END
+    ;
+    print $splash;
+    
+    my $usage = <<END
+
+*** WARNING *** 
+Since the calculations for heating and equilibration are quite demanding this 
+script run only with MPI or CUDA implementation of pmemd program.
 
 This script is aimed to perform all the preparatory steps in order to set up a 
 classical full atom molecular dynamics in explicit solvent (ie protein, also 
-with a small molecule ligand, plus TIP3P water and counterions in a 10A 
-truncated octahedron box).
+with a small molecule ligand, plus TIP3P water and counterions in a 10A box).
 
 The main steps of the workflow are:
 
@@ -81,34 +95,39 @@ The main steps of the workflow are:
        receptor, ligamd and complex systems.
     
     C) MINIMIZATION, protein backbone and ligand position restraints 
-       (500 kcal/molA), 500 steps steepest descent + 1500 coniugated gradient 
+       (500 kcal/(mol A)), 1000 steps steepest descent + 1000 coniugated gradient 
     
-    D) HEATING, in NVT ensemble to 300K (10ps, dt 2fs)
+    D) HEATING, in NVT ensemble from 0 to 100K (100ps, dt 2fs) protein backbone 
+       position restraints (4 kcal/(mol A))
     
-    E) EQUILIBRATION, in NPT ensemble at 300K (100ps, dt 2fs)
+    E) HEATING, in NPT ensemble from 100 to 300K (250ps, dt 2fs) protein backbone 
+       position restraints (1 kcal/(mol A))
+    
+    F) EQUILIBRATION, in NPT ensemble at 300K (750ps, dt 2fs) protein backbone 
+       position restraints (1 kcal/(mol A))
     
 SYNOPSIS
     
-    \$ miniAMBER.pl protein.pdb                 # single protein preparation
+    \$ miniAMBER.pl protein.pdb                 # protein preparation
     
-    \$ miniAMBER.pl protein.pdb  -mpi 2         # parallelized jobs(*)
+    \$ miniAMBER.pl protein.pdb  -lig ligand    # complex preparation
     
-    \$ miniAMBER.pl protein.pdb  -lig ligand    # receptor/ligand preparation
-
-(*)In the case of receptor/ligand systems the script launches three concurrent 
-jobs at a time (for receptor, ligand and complex respectively). Therefore, the 
-number of the threads required with the '-mpi' should be finely tuned.
+    \$ miniAMBER.pl protein.pdb  -mpi 2         # parallelized jobs
+    
+    \$ miniAMBER.pl protein.pdb  -pmemd cuda    # use CUDA
 
 OPTIONS
     
-    -lig <string>       use small molecule ligand, the string identify the name 
-                        prefix for .mol2 and .frcmod files (e.g: "ligand" refers 
-                        to files <ligand.mol2> and <ligand.frcmod>)
+    -lig <string>         use small molecule ligand, the string identify the name 
+                          prefix for .mol2 and .frcmod files (e.g: "ligand" refers 
+                          to files <ligand.mol2> and <ligand.frcmod>)
     
-    -mpi <integer>      use mpirun, you must specify the number of threads
-                        required
+    -mpi <integer>        only for MPI implementation of pmemd, number of threads
+                          required (default: $mpi)
     
-    -box <"cubic|oct">  type of solvation box, cubic or octahedron (default)
+    -box <"cubic|oct">    type of solvation box, cubic or octahedron (default: $boxtype)
+    
+    -pmemd <"cuda|mpi">   implementation of pmemd (default: $pmemd_enhance)
 END
     ;
     unless ($ARGV[0]) {
@@ -118,41 +137,18 @@ END
 }
 
 INIT: {
-    my $splash = <<END
-********************************************************************************
-miniAMBER
-release 14.5.a
-
-Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
-
-This work is licensed under a Creative Commons
-Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-********************************************************************************
-END
-    ;
-    print $splash;
     
-    # verifico che i binari ci siano tutti
-    chomp $bins{'mpirun'};
-    foreach my $key (keys %bins) {
-        if (-e $bins{$key}) {
-            next;
-        } else {
-            croak "\nE- file <$bins{$key}> not found\n\t";
-        }
-    }
-    
-    # verifico se l'opzione mpi è abilitata
-    unless ($mpi eq 'null') {
+    # se AMBER implementa CUDA lo uso altrimenti ricorro all'MPI
+    if ($pmemd_enhance eq 'cuda') {
+        $bins{'sander'} = $AMBERHOME . '/bin/pmemd.cuda';
+    } elsif ($pmemd_enhance eq 'mpi') {
+        chomp $bins{'mpirun'};
         $mpi = $bins{'mpirun'} . " -np $mpi ";
-        my $sandermpi = $bins{'sander'} . '.MPI';
-        if (-e $sandermpi) {
-            $bins{'sander'} = $mpi . $sandermpi;
-        } else {
-            print "\nW- file <$sandermpi> not found, '-mpi' option disabled\n";
-            $mpi = 'null';
-        }
+        $bins{'sander'} = $mpi . $bins{'sander'};
+    } else {
+        croak "\nE- no suitable version of pmemd (CUDA or MPI) found, aborting\n\t";
     }
+    printf("\nI- using <%s>\n", $bins{'sander'});
     
     # verifico che esista il recettore
     unless (-e $ARGV[0]) {
@@ -184,6 +180,8 @@ END
     } else {
         croak "\nE- boxtype [$boxtype] unkown\n\t";
     }
+    
+    
 }
 
 TLEAPS: {
@@ -198,315 +196,209 @@ TLEAPS: {
     }
     qx/cp $ARGV[0] $workdir\//;
     
-    my $logfile = $workdir . '/miniAMBER.log';
-    open(LEGO, ">$logfile");
-    my $log;
-    
-    # preparo il tleap per la proteina
-    $tleap_script = <<END
-set default PBRadii mbondi2                             # atomic radii for GB calculations
-source leaprc.ff99SB                                    # load AMBER force field
-source leaprc.gaff                                      # load GAFF forcefield
-REC = loadpdb $ARGV[0]                                  # load molecule (processed with PDB4AMBER.pl)
-check REC                                               # check unit for internal inconsistencies
-saveamberparm REC rec.prmtop rec.inpcrd
-$boxtype REC TIP3PBOX 10.0                            # solvating box
-addIons REC Na+ 0                                       # add counterions
-addIons REC Cl- 0                                       # add counterions
-saveamberparm REC solv.rec.prmtop solv.rec.inpcrd       # save solvated UNIT and PARMSET
-savepdb REC solv.rec.pdb                                # export the solvated system in pdb
-quit 
-END
-    ;
-    open(CALIPPO, ">$workdir/tleap.rec.in");
-    print CALIPPO $tleap_script;
-    close CALIPPO;
-    printf("%s TLEAPS receptor\n", clock());
-    $log = qx/cd $workdir; $bins{'tleap'} -f tleap.rec.in/;
-    print LEGO "*** RECEPTOR ***\n$log";
-    
-    unless ($ligprefix eq 'null') { # solo se ho un ligando...
-        # preparo il tleap per il ligando
+    if ($ligprefix eq 'null') {
+        # preparo il tleap per la proteina
         $tleap_script = <<END
 set default PBRadii mbondi2                             # atomic radii for GB calculations
-source leaprc.ff99SB                                    # load AMBER force field
+source leaprc.ff14SB                                    # load AMBER force field
 source leaprc.gaff                                      # load GAFF forcefield
-LIG = loadmol2 $ligprefix.mol2                          # load molecule (processed with antechamber)
-check LIG                                               # check unit for internal inconsistencies
-loadamberparams $ligprefix.frcmod                       # load extensions to GAFF forcefield (processed with parmcheck)
-saveOff LIG vacuo.lig.lib                               # save vacuo UNITs and PARMSETs to a Object File Format (off) file
-saveamberparm LIG lig.prmtop lig.inpcrd
-$boxtype LIG TIP3PBOX 10.0                            # solvating box
-addIons LIG Na+ 0                                       # add counterions
-addIons LIG Cl- 0                                       # add counterions
-saveamberparm LIG solv.lig.prmtop solv.lig.inpcrd       # save solvated UNIT and PARMSET
-savepdb LIG solv.lig.pdb                                # export the solvated system in pdb
+loadamberparams frcmod.ionsjc_tip3p                     # parametrization for counterions
+REC = loadpdb $ARGV[0]                                  # load molecule (processed with PDB4AMBER.pl)
+check REC                                               # check unit for internal inconsistencies
+saveamberparm REC dry.prmtop dry.inpcrd                 # save UNIT and PARMSET
+$boxtype REC TIP3PBOX 10.0                              # solvating box
+addIons REC Na+ 0                                       # add counterions
+addIons REC Cl- 0                                       
+charge REC                                              # checking net charge
+saveamberparm REC solvated.prmtop solvated.inpcrd       # save solvated UNIT and PARMSET
+savepdb REC solvated.pdb                                # export the solvated system in pdb format
 quit 
 END
         ;
-        open(CALIPPO, ">$workdir/tleap.lig.in");
-        print CALIPPO $tleap_script;
-        close CALIPPO;
-        printf("%s TLEAPS ligand\n", clock());
-        $log = qx/cd $workdir; $bins{'tleap'} -f tleap.lig.in/;
-        print LEGO "\n\n*** LIGAND ***\n$log";
-        
+    } else {
         # preparo il tleap per il complesso
         $tleap_script = <<END
-set default PBRadii mbondi2                             # atomic radii for GB calculations
-source leaprc.ff99SB                                    # load AMBER force field
-source leaprc.gaff                                      # load GAFF forcefield
-loadamberparams $ligprefix.frcmod                       # load extensions to GAFF forcefield (processed with parmcheck)
+set default PBRadii mbondi2
+source leaprc.ff14SB
+source leaprc.gaff
+loadamberparams frcmod.ionsjc_tip3p
+loadamberparams $ligprefix.frcmod
 loadoff vacuo.lig.lib                                   # load Object file for ligand
 REC = loadpdb $ARGV[0]                                  # load receptor (processed with PDB4AMBER.pl)
 LIG = loadmol2 $ligprefix.mol2                          # load ligand (processed with antechamber)
 COM = combine {REC LIG}                                 # complexing receptor and ligand
-saveamberparm COM com.prmtop com.inpcrd
-$boxtype COM TIP3PBOX 10.0                            # solvating box
-addIons COM Na+ 0                                       # add counterions
-addIons COM Cl- 0                                       # add counterions
-charge COM                                              # checking net charge
-saveamberparm COM solv.com.prmtop solv.com.inpcrd       # save solvated UNIT and PARMSET
-savepdb COM solv.com.pdb                                # export the solvated system in pdb
+saveamberparm COM dry.prmtop dry.inpcrd
+$boxtype COM TIP3PBOX 10.0
+addIons COM Na+ 0
+addIons COM Cl- 0
+charge COM
+saveamberparm COM solvated.prmtop solvated.inpcrd
+savepdb COM solvated.pdb
 quit
 END
         ;
-        open(CALIPPO, ">$workdir/tleap.com.in");
-        print CALIPPO $tleap_script;
-        close CALIPPO;
-        printf("%s TLEAPS complex\n", clock());
-        $log =qx/cd $workdir; $bins{'tleap'} -f tleap.com.in/;
-        print LEGO "\n\n*** COMPLEX ***\n$log";
-        
     }
     
-    close LEGO;
+    open(CALIPPO, ">$workdir/tleap.in");
+    print CALIPPO $tleap_script;
+    close CALIPPO;
+    printf("%s TLEAPS\n", clock());
+    my $cmd = "cd $workdir; $bins{'tleap'} -f tleap.in";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    printf("%s TLEAPS terminated\n", clock());
 }
 
 MINIMIZATION: {
     my $sander_script;
-    my $cmd;
     
     # copio i file di input
     mkdir 'MINIMIZATION';
     $workdir = $basepath . 'MINIMIZATION';
-    qx/cp TOPOLOGY\/solv.*.prmtop $workdir\//;
-    qx/cp TOPOLOGY\/solv.*.inpcrd $workdir\//;
+    qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
+    qx/cp TOPOLOGY\/solvated.inpcrd $workdir\//;
     
-    # minimizzazione recettore
-    $sander_script = <<END
-Minimisation: backbone w/ position restraints (500 kcal/molA)
+    if ($ligprefix eq 'null') {
+        # input file per la minimizzazione
+        $sander_script = <<END
+Minimization: backbone w/ position restraints
+&cntrl
+ imin = 1,                              ! perform energy minimization
+ ntx =1,                                ! read just coordinates
+ maxcyc = 2000,                         ! maximum number of steps
+ ncyc = 1000,                           ! step at witch steepest descent will be switched to conjugated gradient
+ ntb = 1, ntp = 0,                      ! constant volume
+ ntr = 1,                               ! flag to enable restraints
+ restraint_wt = 500.0,                  ! restraint energy in kcal/(mol A)
+ restraintmask = '\@N,CA,C,O',          ! restraint mask (atoms and/or residues)
+ ntpr = 50,                             ! print to mdout every 50 steps
+ cut = 8.0,                             ! 8 angstrom cutoff
+ drms = 0.01                            ! energy gradient kcal/(mol A)
+/
+END
+        ;
+    } else {
+        # aggiungo il ligando ai restraint
+        $sander_script = <<END
+Minimization: backbone and ligand w/ position restraints
 &cntrl
  imin = 1,
+ ntx =1,
  maxcyc = 2000,
- ncyc = 500,
- drms = 0.01,
- ntb = 1,
+ ncyc = 1000,
+ ntb = 1, ntp = 0,
  ntr = 1,
  restraint_wt = 500.0,
- restraintmask = '\@N,CA,C,O,CB',
- cut = 8.0
-&end
+ restraintmask = '\@N,CA,C,O | :$ligname',
+ ntpr = 50,
+ cut = 8.0,
+/
 END
-    ;
-    open(SANDRO, ">$workdir/min.rec.in");
+        ;
+    }
+    
+    open(SANDRO, ">$workdir/minimization.in");
     print SANDRO $sander_script;
     close SANDRO;
     
     # lancio la minimizzazione
-    $cmd = "cd $workdir; $bins{'sander'} -O -i min.rec.in -p solv.rec.prmtop -c solv.rec.inpcrd -ref solv.rec.inpcrd -r min.rec.rst7 -o min.rec.mdout";
-    printf("%s MINIMIZATION receptor started...\n", clock());
-    push @thr, threads->new(\&launch_thr, $cmd, "MINIMIZATION receptor");
-    
-    unless ($ligprefix eq 'null') { 
-        # minimizzazione del complesso
-        $sander_script = <<END
-Minimisation: backbone and ligand w/ position restraints (500 kcal/molA)
-&cntrl
- imin = 1,
- maxcyc = 2000,
- ncyc = 500,
- drms = 0.01,
- ntb = 1,
- ntr = 1,
- restraint_wt = 500.0,
- restraintmask = '\@N,CA,C,O,CB | :$ligname',
- cut = 8.0
-&end
-END
-        ;
-        
-        open(SANDRO, ">$workdir/min.com.in");
-        print SANDRO $sander_script;
-        close SANDRO;
-        
-        $cmd = "cd $workdir; $bins{'sander'} -O -i min.com.in -p solv.com.prmtop -c solv.com.inpcrd -ref solv.com.inpcrd -r min.com.rst7 -o min.com.mdout";
-        printf("%s MINIMIZATION complex started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "MINIMIZATION complex");
-        
-        # minimizzazione del ligando
-        $sander_script = <<END
-Minimisation: ligand w/ position restraints (500 kcal/molA)
-&cntrl
- imin = 1,
- maxcyc = 2000,
- ncyc = 500,
- drms = 0.01,
- ntb = 1,
- ntr = 1,
- restraint_wt = 500.0,
- restraintmask = ':$ligname',
- cut = 8.0
-&end
-END
-        ;
-        
-        open(SANDRO, ">$workdir/min.lig.in");
-        print SANDRO $sander_script;
-        close SANDRO;
-        
-        $cmd = "cd $workdir; $ligsander -O -i min.lig.in -p solv.lig.prmtop -c solv.lig.inpcrd -ref solv.lig.inpcrd -r min.lig.rst7 -o min.lig.mdout";
-        printf("%s MINIMIZATION ligand started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "MINIMIZATION ligand");
-    }
-    
-    for (@thr) { $_->join() }; # attendo che le minimizzazioni finiscano
-    undef @thr;
+    printf("%s MINIMIZATION\n", clock());
+    my $cmd = "cd $workdir; $bins{'sander'} -O -i minimization.in -o minimization.mdout -p solvated.prmtop -c solvated.inpcrd -r minimization.rst7 -ref solvated.inpcrd -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    printf("%s MINIMIZATION terminated\n", clock());
 }
 
 HEATING: {
     my $sander_script;
-    my $cmd;
     
     # copio i file di input
     mkdir 'HEATING';
     $workdir = $basepath . 'HEATING';
-    qx/cp TOPOLOGY\/solv.*.prmtop $workdir\//;
-    qx/cp MINIMIZATION\/min.*.rst7 $workdir\//;
+    qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
+    qx/cp MINIMIZATION\/minimization.rst7 $workdir\//;
     
-    # heating recettore
-    $sander_script = <<END
-Heating up the system in NVT ensemble (10 ps)
+    # input file per l'heating
+    $sander_script = <<ROGER
+Heating up the system in NVT ensemble (100 ps)
 &cntrl
- imin = 0,
- irest= 0,
- ntpr = 500,
- ntwx = 500,
- ntwe = 500,
- ioutfm = 0,
- nstlim = 5000,
- dt = 0.002,
- nscm = 1000,
- ig = 71277,
- temp0 = 300.0,
- tempi = 100.0,
- ntt = 3,
- gamma_ln = 2.0,
- vlimit = 20.0,
- ntp = 0,
- ntc = 2,
- ntb = 1,
- ntf = 2,
- cut = 8.0,
- nsnb = 25,
- ipol = 0,
- igb = 0
-&end
-
-END
+ imin = 0, ntx = 1,                     ! enable MD run with no initial velocity information
+ ntb = 1, cut = 8.0,                    ! NVT ensemble at 8 angstrom cutoff
+ ntp = 0,                               ! no barostat
+ ntf = 2, ntc = 2,                      ! SHAKE algorithm with hydrogens constrained
+ ntt = 3, gamma_ln = 1.0,               ! Langevin thermostat every 1.0ps
+ tempi = 0.0,                           ! initial temperature of 0K
+ nstlim = 50000, dt = 0.002,            ! 50,000 steps x 2fs = 100ps
+ iwrap = 1,                             ! wrap coordinates to central box
+ nscm = 1000                            ! removal of translational and rotational center-of-mass every 1,000 steps
+ ioutfm = 1,                            ! write output (mdcrd) in NetCDF format
+ ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
+ ntwr = 5000,                           ! write restart file every 5,000 steps
+ ntr = 1, restraint_wt = 4.0,           ! restraint backbone atoms with 4.0 Kcal/mol/A
+ restraintmask = '\@N,CA,C,O',
+ ig = 71277,                            ! random seed
+ nmropt = 1,                            ! used to ramp temperature slowly (as follows)
+/
+&wt type='TEMP0', istep1=0, istep2=50000, value1=0.0, value2=100.0 /
+&wt type='END' /
+ROGER
     ;
     open(SANDRO, ">$workdir/eq.nvt.in");
     print SANDRO $sander_script;
     close SANDRO;
     
     # lancio la simulazione del recettore
-    $cmd = "cd $workdir; $bins{'sander'} -O -i eq.nvt.in -p solv.rec.prmtop -c min.rec.rst7 -r eq.nvt.rec.rst7 -o eq.nvt.rec.mdout -x eq.nvt.rec.mdcrd -e eq.nvt.rec.mden";
-    printf("%s HEATING receptor started...\n", clock());
-    push @thr, threads->new(\&launch_thr, $cmd, "HEATING receptor");
-    
-    unless ($ligprefix eq 'null') {
-        # lancio la simulazione del ligando
-        $cmd = "cd $workdir; $ligsander -O -i eq.nvt.in -p solv.lig.prmtop -c min.lig.rst7 -r eq.nvt.lig.rst7 -o eq.nvt.lig.mdout -x eq.nvt.lig.mdcrd -e eq.nvt.lig.mden";
-        printf("%s HEATING ligand started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "HEATING ligand");
-        
-        # lancio la simulazione del complesso
-        $cmd = "cd $workdir; $bins{'sander'} -O -i eq.nvt.in -p solv.com.prmtop -c min.com.rst7 -r eq.nvt.com.rst7 -o eq.nvt.com.mdout -x eq.nvt.com.mdcrd -e eq.nvt.com.mden";
-        printf("%s HEATING complex started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "HEATING complex");
-    }
-    
-    for (@thr) { $_->join() }; # attendo che le simulazioni finiscano
-    undef @thr;
+    printf("%s HEATING\n", clock());
+    my $cmd = "cd $workdir; $bins{'sander'} -O -i eq.nvt.in -o eq.nvt.mdout -p solvated.prmtop -c minimization.rst7 -r eq.nvt.rst7 -x eq.nvt.nc -ref minimization.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    printf("%s HEATING terminated\n", clock());
 }
 
 EQUILIBRATION: {
     my $sander_script;
-    my $cmd;
     
     # copio i file di input
     mkdir 'EQUILIBRATION';
     $workdir = $basepath . 'EQUILIBRATION';
-    qx/cp TOPOLOGY\/solv.*.prmtop $workdir\//;
-    qx/cp HEATING\/eq.nvt.*.rst7 $workdir\//;
+    qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
+    qx/cp HEATING\/eq.nvt.rst7 $workdir\//;
     
-    # equilibrazione recettore
-    $sander_script = <<END
-Equilibrating the system in NPT ensemble (100 ps)
+    # input file per la equilibrazione
+    $sander_script = <<ROGER
+Equilibrating the system in NPT ensemble (heating for 250ps + 750ps at 300K)
 &cntrl
- imin = 0,
- ntx = 5,
- irest= 1,
- ntpr = 500,
- ntwx = 500,
- ntwe = 500,
- ioutfm = 0,
- nstlim = 50000,
- dt = 0.002,
- nscm = 1000,
- ig = 71277,
- temp0 = 300.0,
- ntt = 3,
- gamma_ln = 2.0,
- vlimit = 20.0,
- ntp = 1,
- pres0 = 1.0,
- comp = 44.6,
- taup = 2,
- ntc = 2,
- ntb = 2,
- ntf = 2,
- cut = 8.0,
- nsnb = 25,
- ipol = 0,
- igb = 0
-&end
-
-END
+ imin = 0, ntx = 5, irest= 1,           ! enable MD run reading coordinates and velocities from the restart
+ ntb = 2, cut = 8.0,                    ! NPT ensemble at 8 angstrom cutoff
+ ntp = 1, pres0 = 1.0,                  ! isotropic pressure scaling at 1 atm
+ barostat=1,                            ! Berendsen barostat
+ comp = 44.6,                           ! compressibility (units are 1.0E-06 bar-1)
+ taup = 2,                              ! pressure coupling every 2 ps
+ ntf = 2, ntc = 2,                      ! SHAKE algorithm with hydrogens constrained
+ ntt = 3, gamma_ln = 1.0,               ! Langevin thermostat every 1.0ps
+ temp0 = 300.0,                         ! reference temperature at 300K
+ nstlim = 500000, dt = 0.002,           ! 500,000 steps x 2fs = 1ns
+ iwrap = 1,                             ! wrap coordinates to central box
+ nscm = 1000                            ! removal of translational and rotational center-of-mass every 1,000 steps
+ ioutfm = 1,                            ! write output (mdcrd) in NetCDF format
+ ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
+ ntwr = 5000,                           ! write restart file every 5,000 steps
+ ntr = 1, restraint_wt = 1.0,           ! restraint backbone atoms with 1.0 Kcal/mol/A
+ restraintmask = '\@N,CA,C,O',
+ ig = 71277,                            ! random seed
+ nmropt = 1,                            ! used to ramp temperature slowly (as follows)
+/
+&wt type='TEMP0', istep1=0, istep2=125000, value1=100.0, value2=300.0 /
+&wt type='TEMP0', istep1=125001, istep2=500000, value1=300.0, value2=300.0 /
+&wt type='END' /
+ROGER
     ;
     open(SANDRO, ">$workdir/eq.npt.in");
     print SANDRO $sander_script;
     close SANDRO;
     
     # lancio la simulazione del recettore
-    $cmd = "cd $workdir; $bins{'sander'} -O -i eq.npt.in -p solv.rec.prmtop -c eq.nvt.rec.rst7 -r eq.npt.rec.rst7 -o eq.npt.rec.mdout -x eq.npt.rec.mdcrd -e eq.npt.rec.mden";
-    printf("%s EQUILIBRATION receptor started...\n", clock());
-    push @thr, threads->new(\&launch_thr, $cmd, "EQUILIBRATION receptor");
-    
-    unless ($ligprefix eq 'null') {
-        # lancio la simulazione del ligando
-        $cmd = "cd $workdir; $ligsander -O -i eq.npt.in -p solv.lig.prmtop -c eq.nvt.lig.rst7 -r eq.npt.lig.rst7 -o eq.npt.lig.mdout -x eq.npt.lig.mdcrd -e eq.npt.lig.mden";
-        printf("%s EQUILIBRATION ligand started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "EQUILIBRATION ligand");
-        
-        # lancio la simulazione del complesso
-        $cmd = "cd $workdir; $bins{'sander'} -O -i eq.npt.in -p solv.com.prmtop -c eq.nvt.com.rst7 -r eq.npt.com.rst7 -o eq.npt.com.mdout -x eq.npt.com.mdcrd -e eq.npt.com.mden";
-        printf("%s EQUILIBRATION complex started...\n", clock());
-        push @thr, threads->new(\&launch_thr, $cmd, "EQUILIBRATION complex");
-    }
-    
-    for (@thr) { $_->join() }; # attendo che le simulazioni finiscano
-    undef @thr;
+    printf("%s EQUILIBRATION\n", clock());
+    my $cmd = "cd $workdir; $bins{'sander'} -O -i eq.npt.in -o eq.npt.mdout -p solvated.prmtop -c eq.nvt.rst7 -r eq.npt.rst7 -x eq.npt.nc  -ref eq.nvt.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    printf("%s EQUILIBRATION terminated\n", clock());
 }
 
 FINE: {
@@ -524,10 +416,4 @@ sub clock {
     $sec = sprintf("%02d", $sec);
     my $date = '[' . ($anno+1900)."/$mese/$giom $ore:$min:$sec]";
     return $date;
-}
-
-sub launch_thr {
-    my ($cmd, $jobname) = @_;
-    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
-    printf("%s %s terminated\n", clock(), $jobname);
 }
