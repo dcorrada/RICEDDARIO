@@ -180,7 +180,7 @@ CORE: {
             $distance = sqrt $distance;
             if ($distance < 2.1) {
                 my $key1 = $SG->[$i][7].$SG->[$i][8];
-                my $key2 = $SG->[$i][7].$SG->[$i][8];
+                my $key2 = $SG->[$j][7].$SG->[$j][8];
                 $bridge{$key1} = 1 unless (exists $bridge{$key1});
                 $bridge{$key2} = 1 unless (exists $bridge{$key2});
             }

@@ -8,6 +8,10 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+- DONKEY: minor bugfix
+- miniAMBER: minor bugfix
+- PDB4AMBER: minor bugfix
+- miniAMBER_homology_models: initial release (15.10.a)
 
 *** release 15.09 ***
 - DONKEY: new release (15.04.a)

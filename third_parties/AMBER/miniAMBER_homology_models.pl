@@ -3,17 +3,7 @@
 
 # ########################### RELEASE NOTES ####################################
 #
-# release 14.05.a        - initial release
-#
-# release 15.02.a        - save intermediate non-solvated parm files
-#                        - added 'drms = 0.01' to minimization steps
-#
-# release 15.02.b        - during NVT, increase temperature linearly
-#
-# release 15.07.a        - using forcefield ff14SB
-#                        - heating and equilibration steps improved
-#                        - preparation only for the complex with '-lig' option
-#                        - usable only for MPI/CUDA implementation of pmemd
+# release 15.10.a        - initial release
 #
 # ##############################################################################
 
@@ -61,8 +51,8 @@ USAGE: {
     
     my $splash = <<END
 ********************************************************************************
-miniAMBER
-release 15.07.a
+miniAMBER for homology models
+release 15.10.a
 
 Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
 
@@ -83,7 +73,8 @@ This script is aimed to perform all the preparatory steps in order to set up a
 classical full atom molecular dynamics in explicit solvent (ie protein, also 
 with a small molecule ligand, plus TIP3P water and counterions in a 10A box).
 
-The main steps of the workflow are:
+This script is a variant of the original miniAMBER, dedicated to sensitive 
+systems like homology models. The main steps of the workflow are:
 
     A) PRE-PROCESSING, performed by the user prior to launch this script. The 
        receptor/protein molecule needs to be pre-processed in a pdb format 
@@ -94,8 +85,8 @@ The main steps of the workflow are:
     B) TOPOLOGY, launching tleap to obtain parameters and coordinate files of 
        receptor, ligamd and complex systems.
     
-    C) MINIMIZATION, protein backbone and ligand position restraints 
-       (500 kcal/(mol A)), 1000 steps steepest descent + 1000 coniugated gradient 
+    C) MINIMIZATION, multistep (4 stages) with sequential position restraints 
+       (500 kcal/(mol A)), 500 steps steepest descent + 1500 coniugated gradient 
     
     D) HEATING, in NVT ensemble from 0 to 100K (100ps, dt 2fs) protein backbone 
        position restraints (4 kcal/(mol A))
@@ -105,6 +96,8 @@ The main steps of the workflow are:
     
     F) EQUILIBRATION, in NPT ensemble at 300K (750ps, dt 2fs) protein backbone 
        position restraints (1 kcal/(mol A))
+    
+    G) EQUILIBRATION, in NPT ensemble at 300K (1,000ps, dt 2fs) with no restraint
     
 SYNOPSIS
     
@@ -249,7 +242,11 @@ END
 }
 
 MINIMIZATION: {
-    my $sander_script;
+    my $sander_stage1;
+    my $sander_stage2;
+    my $sander_stage3;
+    my $sander_stage4;
+    my $cmd;
     
     # copio i file di input
     mkdir 'MINIMIZATION';
@@ -257,53 +254,115 @@ MINIMIZATION: {
     qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
     qx/cp TOPOLOGY\/solvated.inpcrd $workdir\//;
     
-    if ($ligprefix eq 'null') {
-        # input file per la minimizzazione
-        $sander_script = <<END
-Minimization: backbone w/ position restraints
+    # input files per la minimizzazione
+    $sander_stage1 = <<END
+Minimisation Stage 1: solvent + ions - Holding the solute fixed
 &cntrl
- imin = 1,                              ! perform energy minimization
- ntx =1,                                ! read just coordinates
- maxcyc = 2000,                         ! maximum number of steps
- ncyc = 1000,                           ! step at witch steepest descent will be switched to conjugated gradient
- ntb = 1, ntp = 0,                      ! constant volume
- ntr = 1,                               ! flag to enable restraints
- restraint_wt = 500.0,                  ! restraint energy in kcal/(mol A)
- restraintmask = '\@N,CA,C,O',          ! restraint mask (atoms and/or residues)
- ntpr = 50,                             ! print to mdout every 50 steps
- cut = 8.0,                             ! 8 angstrom cutoff
- drms = 0.01                            ! energy gradient kcal/(mol A)
+ imin = 1,
+ maxcyc = 2000,
+ ncyc = 500,
+ ntb = 1, ntp = 0,
+ ntr = 1,
+ restraint_wt = 500.0,
+ restraintmask = '!:WAT',
+ cut = 10
+/
+END
+    ;
+    $sander_stage3 = <<END
+Minimisation Stage 3: solute atoms - Holding solvent + ions fixed
+&cntrl
+ imin = 1,
+ maxcyc = 2000,
+ ncyc = 500,
+ ntb = 1,
+ ntr = 1,
+ restraint_wt=500.0,
+ restraintmask=':WAT,Na+,Cl-',
+ cut = 10
+/
+END
+    ;
+    $sander_stage4 = <<END
+Minimisation Stage 4: all atoms - no restraints
+&cntrl
+ imin = 1,
+ maxcyc = 2000,
+ ncyc = 500,
+ ntb = 1,
+ cut = 10
+/
+END
+        ;
+    
+    # aggiunta di restraint al ligando
+    if ($ligprefix eq 'null') {
+        $sander_stage2 = <<END
+Minimisation Stage 2: sidechain atoms - Holding backbone, solvent + ions fixed
+&cntrl
+ imin = 1,
+ maxcyc = 2000,
+ ncyc = 500,
+ ntb = 1,
+ ntr = 1,
+ restraint_wt=500.0,
+ restraintmask='\@N,CA,C,O,CB | :WAT,Na+,Cl-',
+ cut = 10
 /
 END
         ;
     } else {
-        # aggiungo il ligando ai restraint
-        $sander_script = <<END
-Minimization: backbone and ligand w/ position restraints
+        $sander_stage2 = <<END
+Minimisation Stage 2: sidechain atoms - Holding backbone, solvent + ions fixed
 &cntrl
  imin = 1,
- ntx =1,
  maxcyc = 2000,
- ncyc = 1000,
- ntb = 1, ntp = 0,
+ ncyc = 500,
+ ntb = 1,
  ntr = 1,
- restraint_wt = 500.0,
- restraintmask = '\@N,CA,C,O | :$ligname',
- ntpr = 50,
- cut = 8.0,
+ restraint_wt=500.0,
+ restraintmask='\@N,CA,C,O,CB | :WAT,Na+,Cl-,$ligname',
+ cut = 10
 /
 END
         ;
     }
     
-    open(SANDRO, ">$workdir/minimization.in");
-    print SANDRO $sander_script;
+    open(SANDRO, ">$workdir/mini_stage1.in");
+    print SANDRO $sander_stage1;
+    close SANDRO;
+    
+    open(SANDRO, ">$workdir/mini_stage2.in");
+    print SANDRO $sander_stage2;
+    close SANDRO;
+    
+    open(SANDRO, ">$workdir/mini_stage3.in");
+    print SANDRO $sander_stage3;
+    close SANDRO;
+    
+    open(SANDRO, ">$workdir/mini_stage4.in");
+    print SANDRO $sander_stage4;
     close SANDRO;
     
     # lancio la minimizzazione
     printf("%s MINIMIZATION\n", clock());
-    my $cmd = "cd $workdir; $bins{'sander'} -O -i minimization.in -o minimization.mdout -p solvated.prmtop -c solvated.inpcrd -r minimization.rst7 -ref solvated.inpcrd -inf mdinfo";
+    
+    print"\tStage 1: solvent + ions - Holding the solute fixed\n";
+    $cmd = "cd $workdir; $bins{'sander'} -O -i mini_stage1.in -o mini_stage1.mdout -p solvated.prmtop -c solvated.inpcrd -r mini_stage1.rst7 -ref solvated.inpcrd -inf mdinfo";
     system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    
+    print"\tStage 2: sidechain atoms - Holding backbone, solvent + ions fixed\n";
+    $cmd = "cd $workdir; $bins{'sander'} -O -i mini_stage2.in -o mini_stage2.mdout -p solvated.prmtop -c mini_stage1.rst7 -r mini_stage2.rst7 -ref mini_stage1.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    
+    print"\tStage 3: solute atoms - Holding solvent + ions fixed\n";
+    $cmd = "cd $workdir; $bins{'sander'} -O -i mini_stage3.in -o mini_stage3.mdout -p solvated.prmtop -c mini_stage2.rst7 -r mini_stage3.rst7 -ref mini_stage2.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    
+    print"\tStage 4: all atoms - no restraints\n";
+    $cmd = "cd $workdir; $bins{'sander'} -O -i mini_stage4.in -o mini_stage4.mdout -p solvated.prmtop -c mini_stage3.rst7 -r mini_stage4.rst7 -ref mini_stage3.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    
     printf("%s MINIMIZATION terminated\n", clock());
 }
 
@@ -314,7 +373,7 @@ HEATING: {
     mkdir 'HEATING';
     $workdir = $basepath . 'HEATING';
     qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
-    qx/cp MINIMIZATION\/minimization.rst7 $workdir\//;
+    qx/cp MINIMIZATION\/mini_stage4.rst7 $workdir\//;
     
     # input file per l'heating
     $sander_script = <<ROGER
@@ -333,7 +392,7 @@ Heating up the system in NVT ensemble (100 ps)
  ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
  ntwr = 5000,                           ! write restart file every 5,000 steps
  ntr = 1, restraint_wt = 4.0,           ! restraint backbone atoms with 4.0 Kcal/mol/A
- restraintmask = '\@N,CA,C,O',
+ restraintmask = '\@N,CA,C,O,CB',
  ig = 71277,                            ! random seed
  nmropt = 1,                            ! used to ramp temperature slowly (as follows)
 /
@@ -347,7 +406,7 @@ ROGER
     
     # lancio la simulazione del recettore
     printf("%s HEATING\n", clock());
-    my $cmd = "cd $workdir; $bins{'sander'} -O -i eq.nvt.in -o eq.nvt.mdout -p solvated.prmtop -c minimization.rst7 -r eq.nvt.rst7 -x eq.nvt.nc -ref minimization.rst7 -inf mdinfo";
+    my $cmd = "cd $workdir; $bins{'sander'} -O -i eq.nvt.in -o eq.nvt.mdout -p solvated.prmtop -c mini_stage4.rst7 -r eq.nvt.rst7 -x eq.nvt.nc -ref mini_stage4.rst7 -inf mdinfo";
     system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
     printf("%s HEATING terminated\n", clock());
 }
@@ -381,7 +440,7 @@ Equilibrating the system in NPT ensemble (heating for 250ps + 750ps at 300K)
  ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
  ntwr = 5000,                           ! write restart file every 5,000 steps
  ntr = 1, restraint_wt = 1.0,           ! restraint backbone atoms with 1.0 Kcal/mol/A
- restraintmask = '\@N,CA,C,O',
+ restraintmask = '\@N,CA,C,O,CB',
  ig = 71277,                            ! random seed
  nmropt = 1,                            ! used to ramp temperature slowly (as follows)
 /
@@ -399,6 +458,50 @@ ROGER
     my $cmd = "cd $workdir; $bins{'sander'} -O -i eq.npt.in -o eq.npt.mdout -p solvated.prmtop -c eq.nvt.rst7 -r eq.npt.rst7 -x eq.npt.nc  -ref eq.nvt.rst7 -inf mdinfo";
     system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
     printf("%s EQUILIBRATION terminated\n", clock());
+}
+
+RELAXATION: {
+    my $sander_script;
+    
+    # copio i file di input
+    mkdir 'RELAXATION';
+    $workdir = $basepath . 'RELAXATION';
+    qx/cp TOPOLOGY\/solvated.prmtop $workdir\//;
+    qx/cp EQUILIBRATION\/eq.npt.rst7 $workdir\//;
+    
+    # input file per la equilibrazione
+    $sander_script = <<ROGER
+Equilibrating the system in NPT ensemble (1000ps at 300K, no restraint)
+&cntrl
+ imin = 0, ntx = 5, irest= 1,           ! enable MD run reading coordinates and velocities from the restart
+ ntb = 2, cut = 8.0,                    ! NPT ensemble at 8 angstrom cutoff
+ ntp = 1, pres0 = 1.0,                  ! isotropic pressure scaling at 1 atm
+ barostat=1,                            ! Berendsen barostat
+ comp = 44.6,                           ! compressibility (units are 1.0E-06 bar-1)
+ taup = 2,                              ! pressure coupling every 2 ps
+ ntf = 2, ntc = 2,                      ! SHAKE algorithm with hydrogens constrained
+ ntt = 3, gamma_ln = 1.0,               ! Langevin thermostat every 1.0ps
+ temp0 = 300.0,                         ! reference temperature at 300K
+ nstlim = 500000, dt = 0.002,           ! 500,000 steps x 2fs = 1ns
+ iwrap = 1,                             ! wrap coordinates to central box
+ nscm = 1000                            ! removal of translational and rotational center-of-mass every 1,000 steps
+ ioutfm = 1,                            ! write output (mdcrd) in NetCDF format
+ ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
+ ntwr = 5000,                           ! write restart file every 5,000 steps
+ ntr = 0,                               ! no restraint
+ ig = 71277,                            ! random seed
+/
+ROGER
+    ;
+    open(SANDRO, ">$workdir/relax.in");
+    print SANDRO $sander_script;
+    close SANDRO;
+    
+    # lancio la simulazione del recettore
+    printf("%s RELAXATION\n", clock());
+    my $cmd = "cd $workdir; $bins{'sander'} -O -i relax.in -o relax.mdout -p solvated.prmtop -c eq.npt.rst7 -r relax.rst7 -x relax.nc  -ref eq.npt.rst7 -inf mdinfo";
+    system($cmd) && do { print "\nW- failed to run <$cmd>\n" };
+    printf("%s RELAXATION terminated\n", clock());
 }
 
 FINE: {
