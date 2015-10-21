@@ -328,7 +328,7 @@ Heating up the system in NVT ensemble (100 ps)
  tempi = 0.0,                           ! initial temperature of 0K
  nstlim = 50000, dt = 0.002,            ! 50,000 steps x 2fs = 100ps
  iwrap = 1,                             ! wrap coordinates to central box
- nscm = 1000                            ! removal of translational and rotational center-of-mass every 1,000 steps
+ nscm = 1000,                           ! removal of translational and rotational center-of-mass every 1,000 steps
  ioutfm = 1,                            ! write output (mdcrd) in NetCDF format
  ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
  ntwr = 5000,                           ! write restart file every 5,000 steps
@@ -376,7 +376,7 @@ Equilibrating the system in NPT ensemble (heating for 250ps + 750ps at 300K)
  temp0 = 300.0,                         ! reference temperature at 300K
  nstlim = 500000, dt = 0.002,           ! 500,000 steps x 2fs = 1ns
  iwrap = 1,                             ! wrap coordinates to central box
- nscm = 1000                            ! removal of translational and rotational center-of-mass every 1,000 steps
+ nscm = 1000,                           ! removal of translational and rotational center-of-mass every 1,000 steps
  ioutfm = 1,                            ! write output (mdcrd) in NetCDF format
  ntpr = 5000, ntwx = 5000,              ! write to mdout and mdcrd every 5,000 steps
  ntwr = 5000,                           ! write restart file every 5,000 steps
