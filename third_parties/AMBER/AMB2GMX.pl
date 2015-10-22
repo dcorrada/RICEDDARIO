@@ -121,7 +121,7 @@ END
     closedir INS;
     ($inputs->{'prmtop'}) = grep { /\.prmtop$/ } @content;
     ($inputs->{'inpcrd'}) = grep { /\.(inpcrd|rst7)$/ } @content;
-    ($inputs->{'mdcrd'}) = grep { /\.mdcrd$/ } @content;
+    ($inputs->{'mdcrd'}) = grep { /(\.mdcrd|\.nc)$/ } @content;
     
     foreach my $key (keys %{$inputs}) {
         if ($inputs->{$key}) {
