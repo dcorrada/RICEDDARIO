@@ -8,6 +8,8 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+- RAGE: updates
+- AMB2GMX: updates
 - DONKEY: minor bugfix
 - miniAMBER: minor bugfix
 - PDB4AMBER: minor bugfix
