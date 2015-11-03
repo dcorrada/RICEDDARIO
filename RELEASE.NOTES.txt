@@ -8,6 +8,7 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+- identity.similarity: new release (15.10.a)
 - PDB_colorize: new release (15.10.a)
 - RAGE: updates
 - AMB2GMX: updates
