@@ -3,6 +3,8 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.11.a       - option to show only stabilizing interactions
+#
 # release 14.8.a        - initial release
 #
 # ##############################################################################
@@ -44,18 +46,19 @@ our $ppifile = 'null'; # lista dei residui che definiscono l'interfaccia
 our $totres; # numero di residui del sistema
 our $varthres = 0.75; # quanta varianza cumulata devono spiegare gli autovettori?
 our $maxprof = 0; # massima valore degli hotspot
+our $stable; # mostra solo le interazioni stabilizzanti
 ## SBLOG ##
 
 USAGE: {
     use Getopt::Long;no warnings;
-    GetOptions('ppi|p=s' => \$ppifile, 'verbose|v' => \$verbose, 'limit|l=f' => \$varthres, 'filter|f=i' => \$filter, 'range|r=f' => \$cbrange);
+    GetOptions('ppi|p=s' => \$ppifile, 'verbose|v' => \$verbose, 'limit|l=f' => \$varthres, 'filter|f=i' => \$filter, 'range|r=f' => \$cbrange, 'stable|s' => \$stable);
     my $splash = <<ROGER
 ********************************************************************************
 BRENDA - BRing the ENergy, ya damned DAemon!
 PPI version
-release 14.8.a
+release 15.11.a
 
-Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
+Copyright (c) 2015, Dario CORRADA <dario.corrada\@gmail.com>
 
 This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.
@@ -119,6 +122,8 @@ following references:
     
     -range <float>      energy threshold to normalize the plot of interaction 
                         energy matrix, in kcal/mol (DEFAULT: 0.1)
+    
+    -stable             filters only stabilizing interactions
     
     -verbose            keep intermediate files
 
@@ -253,8 +258,8 @@ INPUT: {
             if (abs($i - $j) <= $filter) {
                 $sidechain_matrix[$i][$j] = '0.000';
                 $sidechain_matrix[$j][$i] = '0.000';
-#             } elsif ($sidechain_matrix[$i][$j] >= 0) { # filtro le interazioni destabilizzanti
-#                 $sidechain_matrix[$i][$j] = '0.000';
+            } elsif ($stable and ($sidechain_matrix[$i][$j] >= 0)) { # filtro le interazioni destabilizzanti
+                $sidechain_matrix[$i][$j] = '0.000';
             }
         }
     }
@@ -525,6 +530,22 @@ GRAPHICS: {
     @{$content} =<IN>;
     close IN;
     
+    # allestisco plot diversi a seconda che io voglia vedere solo le interazioni stabilizzanti o tutte
+    my $stable_string;
+    if ($stable) {
+        $stable_string = <<ROGER
+set palette defined ( 0 "black", 1 "dark-red", 2 "orange", 3 "white" )
+set cbrange[-$cbrange to 0]
+ROGER
+        ;
+    } else {
+        $stable_string = <<ROGER
+set palette defined ( 0 "blue", 1 "white", 2 "red" )
+set cbrange[-$cbrange to $cbrange]
+ROGER
+        ;
+    }
+    
     my $gnuscript = <<ROGER
 set terminal png size 2400, 2400
 set output "BRENDA.SMATRIX.png"
@@ -540,8 +561,7 @@ set bmargin at screen 0.20
 set tmargin at screen 0.90
 
 set pm3d map
-set palette defined ( 0 "blue", 1 "white", 2 "red" )
-set cbrange[-$cbrange to $cbrange]
+$stable_string
 set tics out
 set xrange[0:$totres+1]
 set yrange[0:$totres+1]
