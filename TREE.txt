@@ -1,4 +1,4 @@
-lun 14 set 2015, 17.21.31, CEST
+ven  6 nov 2015, 08.41.57, CET
 ./
 ├── CONTRIBUTORS.txt
 ├── date.txt
@@ -182,6 +182,8 @@ lun 14 set 2015, 17.21.31, CEST
 │       ├── Menelaus.pm*
 │       └── Theodorus.pm*
 ├── structure/
+│   ├── merge.matrices.pl*
+│   ├── PDB_colorize.pl*
 │   └── PDB_debugger.pl*
 ├── third_parties/
 │   ├── AMBER/
@@ -191,6 +193,7 @@ lun 14 set 2015, 17.21.31, CEST
 │   │   ├── equilibration.in*
 │   │   ├── heating.in*
 │   │   ├── ISABEL.pl*
+│   │   ├── miniAMBER_homology_models.pl*
 │   │   ├── miniAMBER.pl*
 │   │   ├── minimization.in*
 │   │   ├── MM-GBSA.in
@@ -367,4 +370,5 @@ lun 14 set 2015, 17.21.31, CEST
     ├── sh_scheduler.pl*
     └── WORKFLOW.MAP.mm
 
-59 directories, 307 files
+59 directories, 310 files
+

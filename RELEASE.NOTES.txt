@@ -1,6 +1,18 @@
 This is a summary of the major changes made to the package, see also the related 
 release note of the individual scripts for further details.
 
+*** release 15.11 ***
+- merge.matrices: new release (15.11.a)
+- BRENDAppi: new release (15.11.a)
+- identity.similarity: new release (15.10.a)
+- PDB_colorize: new release (15.10.a)
+- RAGE: updates
+- AMB2GMX: updates
+- DONKEY: minor bugfix
+- miniAMBER: minor bugfix
+- PDB4AMBER: minor bugfix
+- miniAMBER_homology_models: initial release (15.10.a)
+
 *** release 15.09 ***
 - DONKEY: new release (15.04.a)
 - miniAMBER: new release (15.07.a)

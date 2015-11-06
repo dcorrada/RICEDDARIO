@@ -283,8 +283,8 @@ criteria <- t(criteria);
 #     Dunn          criterio interno del pacchetto "clValid"
 #     Silhouette    criterio interno del pacchetto "clValid"
 #     mean_sil      silhouette media secondo il pacchetto "cluster"
-#     kMAX_elems    numero di elementi appartenenti al cluster piu' popoloso
 #     kMAX_sil      silhouette media relativa al cluster piu' popoloso
+#     kMAX_elems    numero di elementi appartenenti al cluster piu' popoloso
 csv.out <- cbind(rownames(criteria),criteria)
 colnames(csv.out) <- c("CLUSTERS","Connectivity","Dunn","Silhouette","mean_sil","kMAX_sil","kMAX_elems");
 write.table(csv.out, file = "cluster.summary.csv", quote = TRUE, sep = ";", row.names = FALSE);
@@ -331,12 +331,12 @@ norm.table[6,] <- ABnormal(weight.table[6,],decreasing = TRUE);
 # fattoriale il numero di dati da valutare (questo significa di non usare un k
 # superiore a 10).
 # La pesatura dei criteri di valutazione della cluster analysis purtroppo e'
-# soggettiva: ho deciso di pesare molto la popolosita' del cluster piu' grosso 
-# e la sua silhouette (peso = 4); a seguire vengono i criteri interni del 
-# pacchetto "clValid" (peso = 2); per ultimo viene la silhouette media del 
-# pacchetto "cluster" (peso = 1).
+# soggettiva: ho deciso di pesare molto la silhouette del cluster piu' grosso 
+# (peso = 4); a seguire vengono i criteri interni del pacchetto "clValid" 
+# (peso = 2); per ultimo viene la silhouette media del pacchetto "cluster" e la 
+# popolosita' del cluster piu' grosso (peso = 1).
 k <- dim(rank.table)[2]
-bestcomb <- BruteAggreg(rank.table,k,norm.table,"Spearman",c(2,2,2,1,4,4))
+bestcomb <- BruteAggreg(rank.table,k,norm.table,"Spearman",c(2,2,2,1,4,1))
 png("RankAggreg.png", width = 2048, height = 2048);
 plot(bestcomb)
 dev.off();

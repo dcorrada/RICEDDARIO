@@ -121,7 +121,7 @@ END
     closedir INS;
     ($inputs->{'prmtop'}) = grep { /\.prmtop$/ } @content;
     ($inputs->{'inpcrd'}) = grep { /\.(inpcrd|rst7)$/ } @content;
-    ($inputs->{'mdcrd'}) = grep { /\.mdcrd$/ } @content;
+    ($inputs->{'mdcrd'}) = grep { /(\.mdcrd|\.nc)$/ } @content;
     
     foreach my $key (keys %{$inputs}) {
         if ($inputs->{$key}) {
@@ -146,7 +146,7 @@ END
     $ans = <STDIN>; chomp $ans;
     $options->{'skip'} = $ans if ($ans && !($options->{'skip'} eq $ans));
     
-    ($options->{'filename'}) = $inputs->{'mdcrd'} =~ /(.+)\.mdcrd$/;
+    ($options->{'filename'}) = $inputs->{'mdcrd'} =~ /(.+)(\.mdcrd$|\.nc)/;
     printf("Outputs base name [%s]: ", $options->{'filename'});
     $ans = <STDIN>; chomp $ans;
     $options->{'filename'} = $ans if ($ans && !($options->{'filename'} eq $ans));
@@ -169,12 +169,16 @@ AMBERSIDE: {
     my %ptraj;
     $ptraj{'ptraj_full.in'} = <<END
 trajin $inputs->{'mdcrd'} $options->{'first'} $options->{'last'} $options->{'skip'}
+center origin
+image center origin familiar
 trajout mdcrd.pdb pdb
 
 END
     ;
     $ptraj{'ptraj_inpcrd.in'} = <<END
 trajin $inputs->{'inpcrd'}
+center origin
+image center origin familiar
 trajout mdcrd_0.pdb pdb
 
 END

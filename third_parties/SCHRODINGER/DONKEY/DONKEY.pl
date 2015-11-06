@@ -1075,7 +1075,7 @@ ROGER
     $wider = 1280 if ($wider < 1280); # larghezza minima dell'immagine
     printf("\n%s creating box plots...", clock());
     my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_dG.csv", "enedecomp_Solv.csv"';
-    my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_dG.png", "enedecomp_Solv.png"';
+    my $outlist = '"enedecomp_Coulomb.ps", "enedecomp_VdW.ps", "enedecomp_dG.ps", "enedecomp_Solv.ps"';
     my $scRipt = <<ROGER
 whiskers<-function(infile,outfile) {
     input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";");
@@ -1088,7 +1088,7 @@ whiskers<-function(infile,outfile) {
             colcol = c(colcol, "blue");
         }
     }
-    png(filename = outfile,  width = $wider, height = 800)
+    postscript(file = outfile,  width = $wider, height = 800)
     boxplot(input.subset, notch = FALSE, las = 2, col = colcol);
     abline(h = 0, lty = 2);
     dev.off();
