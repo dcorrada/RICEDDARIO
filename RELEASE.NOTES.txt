@@ -8,6 +8,9 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
+
+
+*** release 15.11 ***
 - merge.matrices: new release (15.11.a)
 - BRENDAppi: new release (15.11.a)
 - identity.similarity: new release (15.10.a)
