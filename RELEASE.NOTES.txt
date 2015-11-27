@@ -8,7 +8,7 @@ REMEMBER to read...
 ...before merging to 'master' branch
 
 *** release XX.YY ***
-
+- DONKEY: new release (15.11.a)
 
 *** release 15.11 ***
 - merge.matrices: new release (15.11.a)
