@@ -3,6 +3,9 @@
 
 # ########################### RELEASE NOTES ####################################
 #
+# release 15.11.a    - added skip option
+#                    - tested and fixed for Schrodinger Suite 2015.3
+#
 # release 15.04.a    - the docking protocol details are parsed from a 
 #                      configuration file (see DONKEYrc file)
 #                    - accurate fit of the models to the reference complex
@@ -64,6 +67,7 @@ our $destdir;
 our $JUMP       = 'STEP1';
 our $THREADSN   = 1;
 our $DONKEYRC   = $ENV{HOME} . '/.DONKEYrc';
+our $SKIP7      = 0;
 
 # i vari programmi che verranno usati
 my $wheRe = qx/which R/; chomp $wheRe;
@@ -110,13 +114,13 @@ USAGE: {
     use Getopt::Long;no warnings;
     my $help;
     my $workflow;
-    GetOptions('help|h' => \$help, 'jump|j=s' => \$JUMP, 'script|s=s' => \$DONKEYRC, 'threads|t=i' => \$THREADSN);
+    GetOptions('help|h' => \$help, 'jump|j=s' => \$JUMP, 'script|s=s' => \$DONKEYRC, 'threads|t=i' => \$THREADSN, 'skip|k' => \$SKIP7);
     my $header = <<ROGER
 ********************************************************************************
 DONKEY - DON't use KnimE Yet
-release 15.04.a
+release 15.11.a 
 
-Copyright (c) 2014, Dario CORRADA <dario.corrada\@gmail.com>
+Copyright (c) 2015, Dario CORRADA <dario.corrada\@gmail.com>
 
 This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.
@@ -146,7 +150,9 @@ version use OPLS_2005 as forcefield to perform the minimization steps.
     
     -script|s <file>    docking protocol file
     
-    -threads|t <int>    number of threads required for each jobrun 
+    -threads|t <int>    number of threads required for each jobrun
+    
+    -skip|k <bool>      skip STEP7
     
 *** INPUT FILES ***
     
@@ -898,18 +904,22 @@ ROGER
     my $summary_file = 'SUMMARY.csv';
     my $summary_content = "MODEL;LIGAND;MMGBSA_dG_Bind;MMGBSA_dG_Bind(NS)\n";
     foreach my $basename (keys %iofiles) {
-        my $logfile = "prime-$basename.log";
+        
+        # codice per parsare gli output in Schrodinger Suite 2015.3
+        my $logfile = "prime-$basename-out.csv";
         if (-e $logfile) {
             open(LOG, '<' . $logfile);
-            my $recordline = 'null';
             while (my $newline = <LOG>) {
                 chomp $newline;
-                if ($newline =~ /------------ Averaged Properties -------/) {
-                    $recordline =~ s/[: ]//g;
-                    $recordline =~ s/,/;/g;
-                    $summary_content .= "$basename;$recordline\n";
+                if ($newline =~ /title/) {
+                    next;
                 } else {
-                    $recordline = $newline;
+                    my @fields = split(',',$newline);
+                    my $ligand = $fields[0];
+                    $ligand =~ s/[: ]//g;
+                    my $dg = sprintf("%.3f", $fields[1]);
+                    my $dgNS = sprintf("%.3f", $fields[61]);
+                    $summary_content .= "$basename;$ligand;$dg;$dgNS\n";
                     next;
                 }
             }
@@ -917,6 +927,27 @@ ROGER
         } else {
             croak("\nE- no MM-GBSA rescore for <$basename>\n\t");
         }
+        
+#         # codice per parsare gli output in Schrodinger Suite 2014
+#         my $logfile = "prime-$basename.log";
+#         if (-e $logfile) {
+#             open(LOG, '<' . $logfile);
+#             my $recordline = 'null';
+#             while (my $newline = <LOG>) {
+#                 chomp $newline;
+#                 if ($newline =~ /------------ Averaged Properties -------/) {
+#                     $recordline =~ s/[: ]//g;
+#                     $recordline =~ s/,/;/g;
+#                     $summary_content .= "$basename;$recordline\n";
+#                 } else {
+#                     $recordline = $newline;
+#                     next;
+#                 }
+#             }
+#             close LOG;
+#         } else {
+#             croak("\nE- no MM-GBSA rescore for <$basename>\n\t");
+#         }
     }
     printf("\n%s SUMMARY:\n\n%s", clock(), $summary_content);
     open(SUM, '>' . $summary_file);
@@ -940,6 +971,8 @@ ROGER
 }
 
 STEP7: {
+    goto FINE if ($SKIP7);
+    
     print "\n\n*** STEP 7: gathering workflow data ***\n";
     
     $sourcedir = "$homedir/STEP6_rescore_MMGBSA";
@@ -1075,7 +1108,7 @@ ROGER
     $wider = 1280 if ($wider < 1280); # larghezza minima dell'immagine
     printf("\n%s creating box plots...", clock());
     my $inlist = '"enedecomp_Coulomb.csv", "enedecomp_VdW.csv", "enedecomp_dG.csv", "enedecomp_Solv.csv"';
-    my $outlist = '"enedecomp_Coulomb.png", "enedecomp_VdW.png", "enedecomp_dG.png", "enedecomp_Solv.png"';
+    my $outlist = '"enedecomp_Coulomb.ps", "enedecomp_VdW.ps", "enedecomp_dG.ps", "enedecomp_Solv.ps"';
     my $scRipt = <<ROGER
 whiskers<-function(infile,outfile) {
     input.table = read.csv(infile , stringsAsFactors=F, na.strings="NA", sep=";");
@@ -1088,7 +1121,7 @@ whiskers<-function(infile,outfile) {
             colcol = c(colcol, "blue");
         }
     }
-    png(filename = outfile,  width = $wider, height = 800)
+    postscript(file = outfile,  width = $wider, height = 800)
     boxplot(input.subset, notch = FALSE, las = 2, col = colcol);
     abline(h = 0, lty = 2);
     dev.off();
