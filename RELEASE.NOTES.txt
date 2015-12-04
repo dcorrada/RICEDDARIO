@@ -9,6 +9,7 @@ REMEMBER to read...
 
 *** release XX.YY ***
 - DONKEY: new release (15.11.a)
+- AMB2GMX: minor bugfix
 
 *** release 15.11 ***
 - merge.matrices: new release (15.11.a)
