@@ -275,6 +275,7 @@ TRJCAT: {
     system("$bins->{'trjcat'} -f traj_?????.xtc -o $options->{'filename'}.start.xtc");
     system("echo $selected | $bins->{'editconf'} -f mdcrd_0.pdb -o $options->{'filename'}.gro -n index.ndx");
     system("echo $selected | $bins->{'trjconv'} -f $options->{'filename'}.start.xtc -s $options->{'filename'}.gro -timestep $options->{'skip'} -o $options->{'filename'}.xtc -n index.ndx");
+    goto CLEANSWEEP;
 }
 
 CPPTRAJ: {
