@@ -1,6 +1,12 @@
 #!/usr/bin/perl
 # -d
 
+# CHANGELOG
+# release 15.12.a               - added 'unit' option, chaged default settings
+#
+# release 14.3.lbpc7            - initial release
+
+
 use strict;
 use warnings;
 
@@ -43,14 +49,14 @@ END
     ;
     my $help;
     use Getopt::Long;no warnings;
-    GetOptions($opt, 'help|h', 'file|f=s', 'dist|d=s', 'min=i', 'max=i', 'clust|c=s');
+    GetOptions($opt, 'help|h', 'file|f=s', 'dist|d=s', 'min=i', 'max=i', 'clust|c=s', 'unit|u=s');
     my $usage = <<END
 
 ********************************************************************************
 EMMA - Rage Against G_clustEr
-release 14.3.lbpc7
+release 15.12.a
 
-Copyright (c) 2011-2014, Dario CORRADA <dario.corrada\@gmail.com>
+Copyright (c) 2011-2015, Dario CORRADA <dario.corrada\@gmail.com>
 
 This work is licensed under a Creative Commons
 Attribution-NonCommercial-ShareAlike 3.0 Unported License.
@@ -84,6 +90,9 @@ OPTIONS
         the agglomeration method to be used
         (default: 'complete')
     
+    -unit|u <'nanometers'|'angstroms'>
+        units adopted for RMSD calculations, ONLY for rmsd.xpm files 
+        (default: 'nanometers')
 
 REQUIREMENTS:
     
@@ -105,6 +114,8 @@ INIT: {
     } else {
         $input = 'rmsd.xpm';
     }
+    
+    $opt->{'unit'} = 'nanometers' unless (exists $opt->{'unit'});
     
     $R_bin = qx/which R/;
     chomp $R_bin;
@@ -149,7 +160,13 @@ XPM_PARSER: {
             my @array = split('', $string);
             for (my $col=0; $col < scalar @array; $col++) {
                 my $real_row = (scalar @array - 1) - $row; # FIX, la prima riga corrisponde all'ultimo timeframe e così via...
-                $rmsd_matrix->[$real_row]->[$col] = $rmsd_range->{$array[$col]};
+                if ($opt->{'unit'} eq 'nanometers') {
+                    $rmsd_matrix->[$real_row]->[$col] = $rmsd_range->{$array[$col]} * 10;
+                } elsif ($opt->{'unit'} eq 'angstroms') {
+                    $rmsd_matrix->[$real_row]->[$col] = $rmsd_range->{$array[$col]};
+                } else {
+                    croak "E- units unknown [$opt->{'unit'}]\n\t";
+                }
             }
             $row++;
         } else {
@@ -452,7 +469,6 @@ CLUSTER_LIST: {
     $file_obj->set_filedata($content);
     $file_obj->write();
 }
-
 
 CLEANSWEEP: { # elimino i file intermedi prodotti
     print "I- cleaning temporary files...\n";
